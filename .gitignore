@@ -1,0 +1,16 @@
+# Environments
+.env
+venv/
+env/
+__pycache__/
+*.pyc
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Distribution
+build/
+dist/
+*.spec
