@@ -1,24 +1,7 @@
-# Auto Blogger Pro Dependencies
-# ==============================
-
-# GUI Framework
-PySide6>=6.5.0
-
-# Web Automation
-selenium>=4.15.0
-webdriver-manager>=4.0.0
-
-# Clipboard (optional - fallback available)
-pyperclip>=1.8.0
-
-# HTTP Client
-requests>=2.31.0
-
-# Markdown Processing
-markdown>=3.5.0
-
-# Image Processing (for delivery tab)
-Pillow>=10.0.0
-
-# Gemini AI (for image generation - optional)
-google-genai>=0.3.0
+PySide6
+selenium
+webdriver-manager
+google-generativeai
+firebase-admin
+python-dotenv
+Pillow
