@@ -1,0 +1,7 @@
+PySide6
+selenium
+webdriver-manager
+google-generativeai
+firebase-admin
+python-dotenv
+Pillow
