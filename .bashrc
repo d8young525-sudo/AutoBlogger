@@ -1,0 +1,1 @@
+export MATPLOTLIBRC=/etc/matplotlibrc

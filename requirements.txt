@@ -1,0 +1,6 @@
+pyside6
+selenium
+webdriver-manager
+pyperclip
+requests
+markdown
