@@ -323,11 +323,14 @@ class InfoTab(QWidget):
 
     def update_result_view(self, result_data):
         title = result_data.get("title", "제목 없음")
-        text_content = result_data.get("content_text", "")
-        md_content = result_data.get("content_md", "")
-        html_content = result_data.get("content_html", "")
-        self.view_text.setText(f"제목: {title}\n\n{text_content}")
+        
+        # API 응답 구조에 맞게 처리 (content 또는 content_text 둘 다 지원)
+        content = result_data.get("content", "") or result_data.get("content_text", "")
+        md_content = result_data.get("content_md", "") or content
+        html_content = result_data.get("content_html", "") or f"<h1>{title}</h1><p>{content.replace(chr(10), '</p><p>')}</p>"
+        
+        self.view_text.setText(f"제목: {title}\n\n{content}")
         self.view_md.setText(f"# {title}\n\n{md_content}")
         self.view_html.setText(html_content)
         self.btn_publish_now.setEnabled(True)
-        self.log_signal.emit("✨ 3가지 스타일로 생성 완료! 탭을 눌러 비교해보세요.")
+        self.log_signal.emit("✨ 글 생성 완료! 탭을 눌러 확인하세요.")
