@@ -42,6 +42,9 @@ class Config:
     # Gemini API (for image generation)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     
+    # Firebase Auth (웹 API 키 - Firebase Console에서 확인)
+    FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "")
+    
     # Window Settings
     WINDOW_WIDTH = 700
     WINDOW_HEIGHT = 1000
