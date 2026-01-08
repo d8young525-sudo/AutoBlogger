@@ -21,7 +21,7 @@ class Config:
     
     # Application Info
     APP_NAME = "Auto Blogger Pro"
-    VERSION = "3.1.0"
+    VERSION = "3.2.0"
     
     # Paths
     BASE_DIR = Path(__file__).parent.resolve()
@@ -38,6 +38,9 @@ class Config:
     
     # Browser Settings
     HEADLESS_BROWSER = os.getenv("HEADLESS_BROWSER", "false").lower() == "true"
+    
+    # Gemini API (for image generation)
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     
     # Window Settings
     WINDOW_WIDTH = 700
@@ -67,6 +70,7 @@ class Config:
             "version": cls.VERSION,
             "backend_url": cls.BACKEND_URL,
             "gui_available": cls.is_gui_available(),
+            "gemini_available": bool(cls.GEMINI_API_KEY),
         }
 
 

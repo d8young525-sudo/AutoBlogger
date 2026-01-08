@@ -74,7 +74,15 @@ class AutomationWorker(QThread):
             # Full automation: generate and publish
             if action == "full":
                 self.data['title'] = res_data.get('title', '')
-                self.data['content'] = res_data.get('content_text', '')
+                # API 응답 키가 content 또는 content_text일 수 있음
+                self.data['content'] = res_data.get('content', '') or res_data.get('content_text', '')
+                
+                if not self.data['content']:
+                    self.log_signal.emit("❌ 생성된 본문 내용이 없습니다.")
+                    self.finished_signal.emit()
+                    return
+                    
+                self.log_signal.emit("📤 발행 프로세스 시작...")
                 self._run_publish_only()
                 
         except Exception as e:

@@ -16,3 +16,9 @@ requests>=2.31.0
 
 # Markdown Processing
 markdown>=3.5.0
+
+# Image Processing (for delivery tab)
+Pillow>=10.0.0
+
+# Gemini AI (for image generation - optional)
+google-genai>=0.3.0
