@@ -43,7 +43,8 @@ class Config:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     
     # Firebase Auth (웹 API 키 - Firebase Console에서 확인)
-    FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "")
+    # 환경변수가 없으면 기본값 사용
+    FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyBAmWCulbDrqONvkA5Zd-Cr_e5GLu3y0Ac")
     
     # Window Settings
     WINDOW_WIDTH = 700
