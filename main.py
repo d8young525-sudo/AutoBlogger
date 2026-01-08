@@ -29,6 +29,7 @@ def run_gui():
         
         from ui.info_tab import InfoTab
         from ui.settings_tab import SettingsTab
+        from ui.delivery_tab import DeliveryTab
         from core.worker import AutomationWorker
         
     except ImportError as e:
@@ -52,10 +53,11 @@ def run_gui():
             self.tabs = QTabWidget()
             
             self.tab_info = InfoTab()
+            self.tab_delivery = DeliveryTab()
             self.tab_settings = SettingsTab()
             
             self.tabs.addTab(self.tab_info, "📝 정보성 글쓰기")
-            self.tabs.addTab(QWidget(), "🚗 출고 후기 (준비중)")
+            self.tabs.addTab(self.tab_delivery, "🚗 출고 후기")
             self.tabs.addTab(self.tab_settings, "⚙️ 환경 설정")
             
             layout.addWidget(self.tabs)
@@ -70,6 +72,10 @@ def run_gui():
             # Connect signals
             self.tab_info.start_signal.connect(self.start_automation)
             self.tab_info.log_signal.connect(self.update_log)
+            
+            # 출고 후기 탭 시그널 연결
+            self.tab_delivery.start_signal.connect(self.start_automation)
+            self.tab_delivery.log_signal.connect(self.update_log)
 
         def start_automation(self, data):
             """Start automation worker"""
