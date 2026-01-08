@@ -2,29 +2,32 @@ import os
 import json
 import base64
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from firebase_functions import https_fn
 from firebase_admin import initialize_app, firestore, auth
 from google import genai
 from google.genai import types
 
+# Firebase 앱 초기화
 initialize_app()
 
-# Firestore 클라이언트
-db = firestore.client()
-
 # 사용량 제한 설정
-DAILY_IMAGE_LIMIT = 20  # 일일 이미지 생성 제한
-MONTHLY_IMAGE_LIMIT = 300  # 월간 이미지 생성 제한
+DAILY_IMAGE_LIMIT = 20
+MONTHLY_IMAGE_LIMIT = 300
+
+# Firestore 클라이언트 (lazy initialization)
+_db = None
+
+def get_db():
+    """Firestore 클라이언트를 필요할 때만 초기화"""
+    global _db
+    if _db is None:
+        _db = firestore.client()
+    return _db
 
 
 def verify_user_token(req: https_fn.Request) -> dict:
-    """
-    Firebase Auth 토큰 검증
-    
-    Returns:
-        dict: {"uid": "user_id", "email": "user@email.com"} or None
-    """
+    """Firebase Auth 토큰 검증"""
     auth_header = req.headers.get("Authorization", "")
     
     if not auth_header.startswith("Bearer "):
@@ -44,13 +47,9 @@ def verify_user_token(req: https_fn.Request) -> dict:
 
 
 def check_user_permission(uid: str) -> dict:
-    """
-    사용자 권한 및 사용량 체크
-    
-    Returns:
-        dict: {"allowed": bool, "reason": str, "usage": dict}
-    """
+    """사용자 권한 및 사용량 체크"""
     try:
+        db = get_db()
         user_ref = db.collection("users").document(uid)
         user_doc = user_ref.get()
         
@@ -58,8 +57,8 @@ def check_user_permission(uid: str) -> dict:
             # 새 사용자 생성
             user_data = {
                 "created_at": datetime.now(),
-                "plan": "free",  # free, basic, premium
-                "is_active": False,  # 결제 전까지 비활성
+                "plan": "free",
+                "is_active": False,
                 "daily_image_count": 0,
                 "monthly_image_count": 0,
                 "last_reset_date": datetime.now().strftime("%Y-%m-%d"),
@@ -146,6 +145,7 @@ def check_user_permission(uid: str) -> dict:
 def increment_usage(uid: str, count: int = 1):
     """이미지 사용량 증가"""
     try:
+        db = get_db()
         user_ref = db.collection("users").document(uid)
         user_ref.update({
             "daily_image_count": firestore.Increment(count),
@@ -218,7 +218,7 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
             )
 
         # ============================================
-        # [모드 3] 이미지 생성 (NEW!)
+        # [모드 3] 이미지 생성 (인증 필요)
         # ============================================
         elif mode == "generate_image":
             # 사용자 인증 체크
@@ -311,7 +311,7 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                 )
 
         # ============================================
-        # [모드 4] 사용자 정보 조회 (NEW!)
+        # [모드 4] 사용자 정보 조회
         # ============================================
         elif mode == "user_info":
             user = verify_user_token(req)
