@@ -57,7 +57,6 @@ def check_user_permission(uid: str) -> dict:
             # 새 사용자 생성
             user_data = {
                 "created_at": datetime.now(),
-                "plan": "free",
                 "is_active": False,
                 "daily_image_count": 0,
                 "monthly_image_count": 0,
@@ -67,7 +66,7 @@ def check_user_permission(uid: str) -> dict:
             user_ref.set(user_data)
             return {
                 "allowed": False,
-                "reason": "결제가 필요합니다. 관리자에게 문의하세요.",
+                "reason": "관리자 승인이 필요합니다. 관리자에게 문의하세요.",
                 "usage": user_data
             }
         
@@ -77,7 +76,7 @@ def check_user_permission(uid: str) -> dict:
         if not user_data.get("is_active", False):
             return {
                 "allowed": False,
-                "reason": "계정이 비활성화 상태입니다. 결제 후 이용 가능합니다.",
+                "reason": "관리자 승인 대기 중입니다. 관리자에게 문의하세요.",
                 "usage": user_data
             }
         
@@ -99,33 +98,10 @@ def check_user_permission(uid: str) -> dict:
             })
             user_data["monthly_image_count"] = 0
         
-        # 플랜별 제한 설정
-        plan = user_data.get("plan", "free")
-        limits = {
-            "free": {"daily": 0, "monthly": 0},
-            "basic": {"daily": 10, "monthly": 150},
-            "premium": {"daily": 30, "monthly": 500},
-            "unlimited": {"daily": 9999, "monthly": 99999}
-        }
+        # 승인된 사용자는 무제한
+        plan_limits = {"daily": 9999, "monthly": 99999}
         
-        plan_limits = limits.get(plan, limits["free"])
-        
-        # 일일 제한 체크
-        if user_data.get("daily_image_count", 0) >= plan_limits["daily"]:
-            return {
-                "allowed": False,
-                "reason": f"일일 이미지 생성 한도({plan_limits['daily']}장)를 초과했습니다.",
-                "usage": user_data
-            }
-        
-        # 월간 제한 체크
-        if user_data.get("monthly_image_count", 0) >= plan_limits["monthly"]:
-            return {
-                "allowed": False,
-                "reason": f"월간 이미지 생성 한도({plan_limits['monthly']}장)를 초과했습니다.",
-                "usage": user_data
-            }
-        
+        # 승인된 사용자는 무제한 허용
         return {
             "allowed": True,
             "reason": "OK",

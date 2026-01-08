@@ -315,14 +315,11 @@ class UserInfoWidget(QWidget):
         
         self.lbl_email.setText(user_data.get("email", "-"))
         
-        plan = user_data.get("plan", "free")
-        plan_names = {
-            "free": "무료 (이미지 생성 불가)",
-            "basic": "Basic (10장/일)",
-            "premium": "Premium (30장/일)",
-            "unlimited": "Unlimited"
-        }
-        self.lbl_plan.setText(plan_names.get(plan, plan))
+        is_active = user_data.get("is_active", False)
+        if is_active:
+            self.lbl_plan.setText("정식 사용자")
+        else:
+            self.lbl_plan.setText("승인 대기")
         
         is_active = user_data.get("is_active", False)
         if is_active:
