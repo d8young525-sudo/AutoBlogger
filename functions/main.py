@@ -4,6 +4,7 @@ import base64
 import logging
 from datetime import datetime
 from firebase_functions import https_fn
+from firebase_functions.options import CorsOptions
 from firebase_admin import initialize_app, firestore, auth
 from google import genai
 from google.genai import types
@@ -161,7 +162,7 @@ def increment_usage(uid: str, count: int = 1):
     region="asia-northeast3", 
     timeout_sec=300, 
     secrets=["GEMINI_API_KEY"],
-    cors=True
+    cors=CorsOptions(cors_origins="*", cors_methods=["GET", "POST", "OPTIONS"])
 )
 def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
     """메인 API 엔드포인트"""
