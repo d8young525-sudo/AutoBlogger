@@ -1,66 +1,119 @@
+"""
+Automation Worker Module
+백그라운드 작업 처리를 위한 Worker Thread
+"""
+import logging
+from typing import Dict, Any, Optional
+
 import requests
 from PySide6.QtCore import QThread, Signal
-from automation import NaverBlogBot
 
-BACKEND_URL = "https://generate-blog-post-yahp6ia25q-du.a.run.app"
+from automation import NaverBlogBot
+from config import Config
+
+logger = logging.getLogger(__name__)
+
 
 class AutomationWorker(QThread):
+    """Background worker for blog automation tasks"""
+    
     log_signal = Signal(str)
     result_signal = Signal(dict)
     finished_signal = Signal()
+    error_signal = Signal(str)
+    progress_signal = Signal(int)
 
-    def __init__(self, data, settings):
+    def __init__(self, data: Dict[str, Any], settings: Dict[str, str]):
+        """
+        Initialize worker
+        
+        Args:
+            data: Task data including topic, action, etc.
+            settings: User settings including credentials
+        """
         super().__init__()
         self.data = data
         self.settings = settings
-        self.bot = None
+        self.bot: Optional[NaverBlogBot] = None
+        self._is_cancelled = False
+
+    def cancel(self):
+        """Cancel the current operation"""
+        self._is_cancelled = True
+        if self.bot:
+            self.bot.close()
 
     def run(self):
-        action = self.data.get('action', 'full')
-        
-        # 1. 발행만 할 경우
-        if action == "publish_only":
-            self.run_publish_only()
-            return
+        """Main worker execution"""
+        try:
+            action = self.data.get('action', 'full')
+            
+            # Publish only mode
+            if action == "publish_only":
+                self._run_publish_only()
+                return
 
-        # 2. 생성 요청
-        res_data = self.run_generation()
-        if not res_data:
+            # Generate content
+            self.progress_signal.emit(10)
+            res_data = self._run_generation()
+            
+            if not res_data or self._is_cancelled:
+                self.finished_signal.emit()
+                return
+
+            # Emit result for UI update
+            self.result_signal.emit(res_data)
+            self.progress_signal.emit(50)
+            
+            if action == "generate":
+                self.log_signal.emit("✅ 원고 생성 완료! [결과 뷰어] 탭에서 확인하세요.")
+                self.progress_signal.emit(100)
+                self.finished_signal.emit()
+                return
+
+            # Full automation: generate and publish
+            if action == "full":
+                self.data['title'] = res_data.get('title', '')
+                self.data['content'] = res_data.get('content_text', '')
+                self._run_publish_only()
+                
+        except Exception as e:
+            logger.error(f"Worker error: {e}")
+            self.error_signal.emit(f"작업 중 오류 발생: {str(e)}")
+        finally:
+            self.progress_signal.emit(100)
             self.finished_signal.emit()
-            return
 
-        # 결과 전달 (UI 업데이트용)
-        self.result_signal.emit(res_data)
+    def _run_generation(self) -> Optional[Dict[str, Any]]:
+        """
+        Request content generation from backend API
         
-        if action == "generate":
-            self.log_signal.emit("✅ 원고 생성 완료! [결과 뷰어] 탭에서 확인하세요.")
-            self.finished_signal.emit()
-            return
-
-        # 3. 전체 실행일 경우 바로 발행
-        if action == "full":
-            self.data['title'] = res_data.get('title', '')
-            self.data['content'] = res_data.get('content_text', '') # 기본은 텍스트
-            self.run_publish_only()
-
-    def run_generation(self):
-        self.log_signal.emit(f"🚀 AI 글 작성 요청 중... (주제: {self.data['topic']})")
+        Returns:
+            Generated content data or None on failure
+        """
+        topic = self.data.get('topic', '')
+        self.log_signal.emit(f"🚀 AI 글 작성 요청 중... (주제: {topic})")
         
-        # 프롬프트 구성
-        emoji_inst = "이모지 사용 안 함"
-        if "조금" in self.data.get('emoji_level', ''): emoji_inst = "적절히 사용"
-        elif "많이" in self.data.get('emoji_level', ''): emoji_inst = "풍부하게 사용"
+        # Build emoji instruction
+        emoji_level = self.data.get('emoji_level', '')
+        if "조금" in emoji_level:
+            emoji_inst = "적절히 사용"
+        elif "많이" in emoji_level:
+            emoji_inst = "풍부하게 사용"
+        else:
+            emoji_inst = "이모지 사용 안 함"
 
+        # Build request payload
         prompt_payload = {
             "mode": "write",
-            "topic": self.data['topic'],
+            "topic": topic,
             "prompt": f"""
                 타겟: {", ".join(self.data.get('targets', []))}
                 질문: {" / ".join(self.data.get('questions', []))}
                 요약: {self.data.get('summary', '')}
                 인사이트: {self.data.get('insight', '')}
-                말투: {self.data.get('tone')}
-                분량: {self.data.get('length')}
+                말투: {self.data.get('tone', '친근한 이웃 (해요체)')}
+                분량: {self.data.get('length', '보통 (1,500자)')}
                 이모지: {emoji_inst}
                 인사말: {self.settings.get('intro', '')}
                 맺음말: {self.settings.get('outro', '')}
@@ -69,52 +122,117 @@ class AutomationWorker(QThread):
         }
 
         try:
-            res = requests.post(BACKEND_URL, json=prompt_payload, timeout=180)
-            if res.status_code == 200:
-                return res.json()
+            response = requests.post(
+                Config.BACKEND_URL, 
+                json=prompt_payload, 
+                timeout=Config.API_TIMEOUT
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                self.log_signal.emit("✅ AI 글 생성 완료!")
+                return result
             else:
-                self.log_signal.emit(f"❌ 서버 에러: {res.text}")
+                error_msg = f"서버 에러 ({response.status_code}): {response.text[:200]}"
+                self.log_signal.emit(f"❌ {error_msg}")
+                logger.error(error_msg)
                 return None
+                
+        except requests.Timeout:
+            self.log_signal.emit("❌ 서버 응답 시간 초과 (3분)")
+            return None
+        except requests.ConnectionError:
+            self.log_signal.emit("❌ 서버 연결 실패 - 네트워크를 확인하세요")
+            return None
         except Exception as e:
             self.log_signal.emit(f"❌ 통신 오류: {str(e)}")
+            logger.error(f"API request failed: {e}")
             return None
 
-    def run_publish_only(self):
+    def _run_publish_only(self):
+        """Execute blog publishing"""
         title = self.data.get('title', '')
         content = self.data.get('content', '')
         
         if not title or not content:
             self.log_signal.emit("❌ 발행할 내용이 없습니다.")
-            self.finished_signal.emit()
             return
 
+        user_id = self.settings.get('id', '')
+        user_pw = self.settings.get('pw', '')
+        
+        if not user_id or not user_pw:
+            self.log_signal.emit("❌ 네이버 계정 정보가 없습니다. 설정 탭에서 입력해주세요.")
+            return
+
+        # Create bot instance with context manager for proper cleanup
         self.bot = NaverBlogBot()
-        self.log_signal.emit("🚀 브라우저 실행 중...")
         
         try:
-            self.bot.start_browser()
-            self.log_signal.emit("🔑 로그인 시도...")
-            if not self.bot.login(self.settings['id'], self.settings['pw'])[0]:
-                self.log_signal.emit("❌ 로그인 실패")
+            # Step 1: Start browser
+            self.log_signal.emit("🚀 브라우저 실행 중...")
+            self.progress_signal.emit(60)
+            
+            success, msg = self.bot.start_browser()
+            if not success:
+                self.log_signal.emit(f"❌ 브라우저 실행 실패: {msg}")
                 return
             
-            self.log_signal.emit("📝 글쓰기 진입...")
-            if not self.bot.go_to_editor()[0]:
-                self.log_signal.emit("❌ 에디터 진입 실패")
+            if self._is_cancelled:
                 return
-
-            self.log_signal.emit("✍️ 본문 작성...")
-            if not self.bot.write_content(title, content)[0]:
-                self.log_signal.emit("❌ 작성 실패")
+            
+            # Step 2: Login
+            self.log_signal.emit("🔑 로그인 시도...")
+            self.progress_signal.emit(70)
+            
+            success, msg = self.bot.login(user_id, user_pw)
+            if not success:
+                self.log_signal.emit(f"❌ 로그인 실패: {msg}")
                 return
-
+            
+            if self._is_cancelled:
+                return
+            
+            # Step 3: Navigate to editor
+            self.log_signal.emit("📝 글쓰기 페이지 진입...")
+            self.progress_signal.emit(80)
+            
+            success, msg = self.bot.go_to_editor()
+            if not success:
+                self.log_signal.emit(f"❌ 에디터 진입 실패: {msg}")
+                return
+            
+            if self._is_cancelled:
+                return
+            
+            # Step 4: Write content
+            self.log_signal.emit("✍️ 본문 작성 중...")
+            self.progress_signal.emit(85)
+            
+            success, msg = self.bot.write_content(title, content)
+            if not success:
+                self.log_signal.emit(f"❌ 작성 실패: {msg}")
+                return
+            
+            if self._is_cancelled:
+                return
+            
+            # Step 5: Publish
             self.log_signal.emit("📤 발행 중...")
-            if self.bot.publish_post()[0]:
+            self.progress_signal.emit(95)
+            
+            success, msg = self.bot.publish_post()
+            if success:
                 self.log_signal.emit("🎉 발행 완료!")
+                self.progress_signal.emit(100)
             else:
-                self.log_signal.emit("❌ 발행 실패")
+                self.log_signal.emit(f"❌ 발행 실패: {msg}")
                 
         except Exception as e:
             self.log_signal.emit(f"💥 치명적 오류: {str(e)}")
+            logger.error(f"Publishing failed: {e}")
         finally:
-            self.finished_signal.emit()
+            # Cleanup - close browser
+            if self.bot:
+                self.bot.close()
+                self.bot = None
