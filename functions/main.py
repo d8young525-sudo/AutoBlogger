@@ -12,8 +12,8 @@ from google.genai import types
 initialize_app()
 
 # 사용량 제한 설정
-DAILY_IMAGE_LIMIT = 20
-MONTHLY_IMAGE_LIMIT = 300
+DAILY_IMAGE_LIMIT = 20  # 일반회원 일일 제한
+MONTHLY_IMAGE_LIMIT = 500  # 일반회원 월간 제한
 
 # Firestore 클라이언트 (lazy initialization)
 _db = None
@@ -58,6 +58,7 @@ def check_user_permission(uid: str) -> dict:
             user_data = {
                 "created_at": datetime.now(),
                 "is_active": False,
+                "is_admin": False,
                 "daily_image_count": 0,
                 "monthly_image_count": 0,
                 "last_reset_date": datetime.now().strftime("%Y-%m-%d"),
@@ -66,7 +67,7 @@ def check_user_permission(uid: str) -> dict:
             user_ref.set(user_data)
             return {
                 "allowed": False,
-                "reason": "관리자 승인이 필요합니다. 관리자에게 문의하세요.",
+                "reason": "관리자 승인이 필요합니다. 오픈카톡으로 문의해주세요: https://open.kakao.com/o/sgbYdyai",
                 "usage": user_data
             }
         
@@ -76,7 +77,7 @@ def check_user_permission(uid: str) -> dict:
         if not user_data.get("is_active", False):
             return {
                 "allowed": False,
-                "reason": "관리자 승인 대기 중입니다. 관리자에게 문의하세요.",
+                "reason": "관리자 승인 대기 중입니다. 오픈카톡으로 문의해주세요: https://open.kakao.com/o/sgbYdyai",
                 "usage": user_data
             }
         
@@ -98,15 +99,40 @@ def check_user_permission(uid: str) -> dict:
             })
             user_data["monthly_image_count"] = 0
         
-        # 승인된 사용자는 무제한
-        plan_limits = {"daily": 9999, "monthly": 99999}
+        # 관리자인지 확인
+        is_admin = user_data.get("is_admin", False)
         
-        # 승인된 사용자는 무제한 허용
+        if is_admin:
+            # 관리자는 무제한
+            plan_limits = {"daily": 999999, "monthly": 9999999}
+        else:
+            # 일반 회원 제한: 하루 20개, 한달 500개
+            plan_limits = {"daily": DAILY_IMAGE_LIMIT, "monthly": MONTHLY_IMAGE_LIMIT}
+            
+            # 일일 제한 체크
+            if user_data.get("daily_image_count", 0) >= DAILY_IMAGE_LIMIT:
+                return {
+                    "allowed": False,
+                    "reason": f"일일 이미지 생성 한도({DAILY_IMAGE_LIMIT}장)를 초과했습니다. 내일 다시 시도해주세요.",
+                    "usage": user_data,
+                    "limits": plan_limits
+                }
+            
+            # 월간 제한 체크
+            if user_data.get("monthly_image_count", 0) >= MONTHLY_IMAGE_LIMIT:
+                return {
+                    "allowed": False,
+                    "reason": f"월간 이미지 생성 한도({MONTHLY_IMAGE_LIMIT}장)를 초과했습니다. 다음 달에 다시 시도해주세요.",
+                    "usage": user_data,
+                    "limits": plan_limits
+                }
+        
         return {
             "allowed": True,
             "reason": "OK",
             "usage": user_data,
-            "limits": plan_limits
+            "limits": plan_limits,
+            "is_admin": is_admin
         }
         
     except Exception as e:

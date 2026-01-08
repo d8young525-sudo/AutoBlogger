@@ -4,6 +4,7 @@ Firebase 로그인 다이얼로그
 """
 import json
 import requests
+import os
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLineEdit, QPushButton, QLabel, QMessageBox,
@@ -14,6 +15,12 @@ from PySide6.QtCore import Signal, QSettings
 # Firebase Auth REST API
 FIREBASE_API_KEY = ""  # Firebase 웹 API 키 (config에서 로드)
 FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts"
+
+# 관리자 연락처 (오픈카톡)
+ADMIN_CONTACT = "https://open.kakao.com/o/sgbYdyai"
+
+# 백엔드 API URL
+BACKEND_URL = os.environ.get("BACKEND_URL", "https://generate-blog-post-yahp6ia25q-du.a.run.app")
 
 
 class LoginDialog(QDialog):
@@ -96,6 +103,12 @@ class LoginDialog(QDialog):
         register_info = QLabel("⚠️ 회원가입 후 관리자 승인이 필요합니다.")
         register_info.setStyleSheet("color: #E67E22; font-size: 12px;")
         register_layout.addWidget(register_info)
+        
+        # 관리자 연락처 안내
+        contact_info = QLabel(f"📞 승인 문의: <a href='{ADMIN_CONTACT}'>오픈카톡</a>")
+        contact_info.setStyleSheet("color: #3498DB; font-size: 12px;")
+        contact_info.setOpenExternalLinks(True)
+        register_layout.addWidget(contact_info)
         
         register_tab.setLayout(register_layout)
         self.tabs.addTab(register_tab, "회원가입")
@@ -224,13 +237,17 @@ class LoginDialog(QDialog):
             if response.status_code == 200:
                 data = response.json()
                 
+                # Firestore에 사용자 문서 즉시 생성 (Backend API 호출)
+                self._create_firestore_user(data.get("idToken"), email)
+                
                 QMessageBox.information(
                     self, 
                     "회원가입 완료", 
                     f"회원가입이 완료되었습니다!\n\n"
                     f"이메일: {email}\n\n"
                     f"⚠️ 서비스 이용을 위해 관리자 승인이 필요합니다.\n"
-                    f"관리자에게 문의해주세요."
+                    f"📞 오픈카톡으로 문의해주세요:\n"
+                    f"{ADMIN_CONTACT}"
                 )
                 
                 # 로그인 탭으로 전환
@@ -257,6 +274,33 @@ class LoginDialog(QDialog):
         finally:
             self.btn_register.setEnabled(True)
             self.btn_register.setText("📝 회원가입")
+    
+    def _create_firestore_user(self, id_token: str, email: str):
+        """회원가입 후 Firestore에 사용자 문서 즉시 생성"""
+        try:
+            # Backend API를 호출하여 user_info 모드로 사용자 문서 생성 유도
+            headers = {
+                "Authorization": f"Bearer {id_token}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "mode": "user_info"
+            }
+            
+            response = requests.post(
+                BACKEND_URL,
+                json=payload,
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                print(f"Firestore 사용자 문서 생성 완료: {email}")
+            else:
+                print(f"Firestore 사용자 문서 생성 실패: {response.status_code}")
+                
+        except Exception as e:
+            print(f"Firestore 문서 생성 중 오류: {e}")
     
     def get_id_token(self) -> str:
         """현재 로그인된 사용자의 ID 토큰 반환"""
