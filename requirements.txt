@@ -1,7 +1,25 @@
-PySide6
-selenium
-webdriver-manager
-google-generativeai
-firebase-admin
-python-dotenv
-Pillow
+# AutoBlogger Dependencies
+# =========================
+
+# GUI Framework (optional - for desktop mode)
+PySide6>=6.5.0
+
+# Web Automation
+selenium>=4.15.0
+webdriver-manager>=4.0.0
+
+# AI Content Generation
+google-generativeai>=0.3.0
+
+# Firebase (optional - for data storage)
+firebase-admin>=6.0.0
+
+# Environment & Configuration
+python-dotenv>=1.0.0
+
+# Image Processing (optional)
+Pillow>=10.0.0
+
+# Development & Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
