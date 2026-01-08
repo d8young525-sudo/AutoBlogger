@@ -182,9 +182,70 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
 
     try:
         # ============================================
+        # [모드 0] 회원가입 시 Firestore 문서 생성 (인증 토큰으로)
+        # ============================================
+        if mode == "register_user":
+            # 토큰 검증
+            user = verify_user_token(req)
+            if not user:
+                return https_fn.Response(
+                    json.dumps({"error": "유효하지 않은 토큰입니다."}),
+                    status=401,
+                    mimetype="application/json"
+                )
+            
+            uid = user["uid"]
+            email = user.get("email", "")
+            
+            try:
+                db = get_db()
+                user_ref = db.collection("users").document(uid)
+                user_doc = user_ref.get()
+                
+                if user_doc.exists:
+                    # 이미 문서가 있으면 그냥 반환
+                    return https_fn.Response(
+                        json.dumps({"success": True, "message": "이미 등록된 사용자입니다.", "uid": uid}),
+                        status=200,
+                        mimetype="application/json"
+                    )
+                
+                # 새 사용자 문서 생성
+                user_data = {
+                    "email": email,
+                    "created_at": datetime.now(),
+                    "is_active": False,  # 관리자 승인 필요
+                    "is_admin": False,
+                    "daily_image_count": 0,
+                    "monthly_image_count": 0,
+                    "last_reset_date": datetime.now().strftime("%Y-%m-%d"),
+                    "last_reset_month": datetime.now().strftime("%Y-%m")
+                }
+                user_ref.set(user_data)
+                
+                return https_fn.Response(
+                    json.dumps({
+                        "success": True, 
+                        "message": "회원가입 완료! 관리자 승인 후 이용 가능합니다.",
+                        "uid": uid,
+                        "contact": "https://open.kakao.com/o/sgbYdyai"
+                    }),
+                    status=200,
+                    mimetype="application/json"
+                )
+                
+            except Exception as e:
+                logging.error(f"Register user failed: {e}")
+                return https_fn.Response(
+                    json.dumps({"error": f"사용자 등록 실패: {str(e)}"}),
+                    status=500,
+                    mimetype="application/json"
+                )
+
+        # ============================================
         # [모드 1] 주제 추천
         # ============================================
-        if mode == "recommend":
+        elif mode == "recommend":
             prompt = f"""
             자동차 전문 블로거로서 '{req_json.get("category")}' 관련 조회수 높은 주제 5개 추천.
             형식: JSON (배열) -> {{"topics": ["주제1", "주제2", ...]}}

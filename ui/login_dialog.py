@@ -284,7 +284,7 @@ class LoginDialog(QDialog):
                 "Content-Type": "application/json"
             }
             payload = {
-                "mode": "user_info"
+                "mode": "register_user"
             }
             
             response = requests.post(
