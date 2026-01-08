@@ -1,16 +1,84 @@
-# Environments
+# Environment & Secrets
 .env
+.env.local
+.env.*.local
+*.key
+*_key.json
+firebase_key.json
+
+# Python
 venv/
 env/
+.venv/
 __pycache__/
-*.pyc
-.DS_Store
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# IDE
+# IDE & Editors
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
 
-# Distribution
+# Testing
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.hypothesis/
+
+# Distribution & Packaging
 build/
 dist/
 *.spec
+*.manifest
+*.exe
+*.dmg
+*.app
+
+# Logs
+*.log
+logs/
+autoblogger.log
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Selenium
+chromedriver
+geckodriver
+*.webdriver
