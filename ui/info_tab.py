@@ -1,6 +1,7 @@
 """
 정보성 글쓰기 탭 - 블로그 포스팅 자동 생성 기능
 UX 개선: 드롭다운/직접입력 상호배타, AI 추천 상태표시, 이미지 생성 옵션
+v3.3.0: 썸네일/본문 삽화 분리, TEXT/MARKDOWN/HTML 옵션 복원
 """
 import requests
 import markdown
@@ -10,7 +11,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFo
                                QComboBox, QLineEdit, QPushButton, QRadioButton, 
                                QButtonGroup, QLabel, QMessageBox, QScrollArea, 
                                QListWidget, QListWidgetItem, QTextEdit, QTabWidget, QCheckBox,
-                               QAbstractItemView, QFrame, QSpinBox)
+                               QAbstractItemView, QFrame, QSpinBox, QGridLayout)
 from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QPixmap, QImage
 
@@ -64,11 +65,12 @@ class ImageGenerateWorker(QThread):
     progress = Signal(int, int)  # current, total
     error = Signal(str)
     
-    def __init__(self, topic: str, count: int, auth_token: str):
+    def __init__(self, topic: str, count: int, auth_token: str, image_type: str = "thumbnail"):
         super().__init__()
         self.topic = topic
         self.count = count
         self.auth_token = auth_token
+        self.image_type = image_type  # "thumbnail" or "illustration"
     
     def run(self):
         try:
@@ -78,10 +80,17 @@ class ImageGenerateWorker(QThread):
                 self.progress.emit(i + 1, self.count)
                 
                 headers = {"Authorization": f"Bearer {self.auth_token}"}
+                
+                # 이미지 타입에 따른 프롬프트 스타일 설정
+                if self.image_type == "thumbnail":
+                    style = "블로그 대표 썸네일, 텍스트 없이, 주제를 잘 나타내는 시각적 이미지"
+                else:  # illustration
+                    style = "블로그 본문 삽화, 텍스트 없이, 심플하고 깔끔한 일러스트레이션"
+                
                 payload = {
                     "mode": "generate_image",
                     "prompt": self.topic,
-                    "style": "블로그 썸네일"
+                    "style": style
                 }
                 
                 response = requests.post(
@@ -117,8 +126,10 @@ class InfoTab(QWidget):
         super().__init__()
         self.recommend_worker = None
         self.analysis_worker = None
-        self.image_worker = None
-        self.generated_images = []  # base64 이미지 리스트
+        self.thumbnail_worker = None
+        self.illustration_worker = None
+        self.thumbnail_images = []  # 썸네일 base64 리스트
+        self.illustration_images = []  # 삽화 base64 리스트
         self.auth_token = ""
         self.init_ui()
 
@@ -262,46 +273,170 @@ class InfoTab(QWidget):
         self.group_adv.setLayout(adv_layout)
         layout.addWidget(self.group_adv)
 
-        # 4. 이미지 생성 (새로 추가)
-        group_image = QGroupBox("4. 썸네일 이미지 생성 (선택)")
+        # 4. 이미지 생성 (썸네일 + 본문 삽화 분리)
+        group_image = QGroupBox("4. 이미지 생성 (선택)")
         group_image.setCheckable(True)
         group_image.setChecked(False)
         image_layout = QVBoxLayout()
         
-        # 이미지 생성 옵션
-        img_option_layout = QHBoxLayout()
-        img_option_layout.addWidget(QLabel("생성할 이미지 수:"))
-        self.spin_image_count = QSpinBox()
-        self.spin_image_count.setRange(1, 3)
-        self.spin_image_count.setValue(1)
-        img_option_layout.addWidget(self.spin_image_count)
-        img_option_layout.addStretch()
+        # 4-1. 썸네일 이미지
+        thumb_frame = QFrame()
+        thumb_frame.setStyleSheet("background-color: #f8f8f8; border-radius: 5px; padding: 5px;")
+        thumb_layout = QVBoxLayout(thumb_frame)
         
-        self.btn_gen_images = QPushButton("🖼️ 이미지 생성")
+        self.chk_thumbnail = QCheckBox("🖼️ 대표 썸네일 이미지 생성")
+        self.chk_thumbnail.setStyleSheet("font-weight: bold;")
+        thumb_layout.addWidget(self.chk_thumbnail)
+        
+        thumb_desc = QLabel("• 글 상단에 표시되는 대표 이미지 (1장)")
+        thumb_desc.setStyleSheet("color: #666; font-size: 11px; margin-left: 20px;")
+        thumb_layout.addWidget(thumb_desc)
+        
+        # 썸네일 미리보기
+        self.thumbnail_preview = QLabel()
+        self.thumbnail_preview.setFixedSize(200, 120)
+        self.thumbnail_preview.setStyleSheet("border: 1px dashed #ccc; background-color: #fff;")
+        self.thumbnail_preview.setAlignment(Qt.AlignCenter)
+        self.thumbnail_preview.setText("썸네일 미리보기")
+        thumb_layout.addWidget(self.thumbnail_preview)
+        
+        self.chk_use_thumbnail = QCheckBox("✅ 이 썸네일 사용")
+        self.chk_use_thumbnail.setEnabled(False)
+        thumb_layout.addWidget(self.chk_use_thumbnail)
+        
+        image_layout.addWidget(thumb_frame)
+        
+        # 4-2. 본문 삽화 이미지
+        illust_frame = QFrame()
+        illust_frame.setStyleSheet("background-color: #f8f8f8; border-radius: 5px; padding: 5px;")
+        illust_layout = QVBoxLayout(illust_frame)
+        
+        illust_header = QHBoxLayout()
+        self.chk_illustration = QCheckBox("🎨 본문 삽화 이미지 생성")
+        self.chk_illustration.setStyleSheet("font-weight: bold;")
+        illust_header.addWidget(self.chk_illustration)
+        
+        illust_header.addWidget(QLabel("생성 수:"))
+        self.spin_illust_count = QSpinBox()
+        self.spin_illust_count.setRange(0, 4)
+        self.spin_illust_count.setValue(2)
+        self.spin_illust_count.setFixedWidth(60)
+        illust_header.addWidget(self.spin_illust_count)
+        illust_header.addStretch()
+        illust_layout.addLayout(illust_header)
+        
+        illust_desc = QLabel("• 글 중간에 삽입되는 삽화 이미지 (0~4장)")
+        illust_desc.setStyleSheet("color: #666; font-size: 11px; margin-left: 20px;")
+        illust_layout.addWidget(illust_desc)
+        
+        # 삽화 미리보기 영역
+        self.illust_preview_layout = QGridLayout()
+        illust_layout.addLayout(self.illust_preview_layout)
+        
+        # 삽화 체크박스들
+        self.illust_checkboxes = []
+        self.illust_checkbox_layout = QHBoxLayout()
+        illust_layout.addLayout(self.illust_checkbox_layout)
+        
+        image_layout.addWidget(illust_frame)
+        
+        # 이미지 생성 버튼
+        self.btn_gen_images = QPushButton("🖼️ 선택한 이미지 생성하기")
         self.btn_gen_images.clicked.connect(self.generate_images)
-        self.btn_gen_images.setStyleSheet("background-color: #9B59B6; color: white; padding: 8px;")
-        img_option_layout.addWidget(self.btn_gen_images)
-        image_layout.addLayout(img_option_layout)
+        self.btn_gen_images.setStyleSheet("background-color: #9B59B6; color: white; padding: 10px; font-weight: bold;")
+        image_layout.addWidget(self.btn_gen_images)
         
         # 이미지 안내
-        img_notice = QLabel("💡 주제에 맞는 블로그 썸네일 이미지를 AI가 생성합니다. (글씨 없는 이미지)")
+        img_notice = QLabel("💡 AI가 주제에 맞는 이미지를 생성합니다. 글씨가 없는 깔끔한 이미지입니다.")
         img_notice.setStyleSheet("color: #666; font-size: 11px;")
         image_layout.addWidget(img_notice)
-        
-        # 생성된 이미지 표시 영역
-        self.image_preview_layout = QHBoxLayout()
-        image_layout.addLayout(self.image_preview_layout)
-        
-        # 이미지 삽입 여부 체크박스들
-        self.image_checkboxes = []
-        self.image_checkbox_layout = QHBoxLayout()
-        image_layout.addLayout(self.image_checkbox_layout)
         
         group_image.setLayout(image_layout)
         layout.addWidget(group_image)
         self.group_image = group_image
 
-        # 5. 실행 버튼
+        # 5. 출력 스타일 설정 (복원)
+        group_output = QGroupBox("5. 출력 스타일 설정")
+        output_layout = QVBoxLayout()
+        
+        # 출력 형식 탭
+        self.output_tabs = QTabWidget()
+        
+        # TEXT 설정 탭
+        text_widget = QWidget()
+        text_layout = QFormLayout(text_widget)
+        
+        self.combo_text_heading = QComboBox()
+        self.combo_text_heading.addItems(["【 】 대괄호", "▶ 화살표", "● 원형", "■ 사각형", "※ 꽃표"])
+        text_layout.addRow("소제목 스타일:", self.combo_text_heading)
+        
+        self.combo_text_emphasis = QComboBox()
+        self.combo_text_emphasis.addItems(["** 별표 **", "「 」 꺽쇠", "★ ~ ★", "밑줄 ___"])
+        text_layout.addRow("강조 표현:", self.combo_text_emphasis)
+        
+        self.combo_text_divider = QComboBox()
+        self.combo_text_divider.addItems(["━━━━━━ (실선)", "- - - - - (점선)", "═══════ (이중선)", "빈 줄만"])
+        text_layout.addRow("구분선:", self.combo_text_divider)
+        
+        self.combo_text_spacing = QComboBox()
+        self.combo_text_spacing.addItems(["기본 (1줄)", "넓게 (2줄)", "좁게 (줄바꿈만)"])
+        text_layout.addRow("문단 간격:", self.combo_text_spacing)
+        
+        self.output_tabs.addTab(text_widget, "📄 Text 설정")
+        
+        # MARKDOWN 설정 탭
+        md_widget = QWidget()
+        md_layout = QFormLayout(md_widget)
+        
+        self.combo_md_heading = QComboBox()
+        self.combo_md_heading.addItems(["## H2 사용", "### H3 사용", "**굵게** 사용"])
+        md_layout.addRow("헤딩 레벨:", self.combo_md_heading)
+        
+        self.combo_md_list = QComboBox()
+        self.combo_md_list.addItems(["- 하이픈", "* 별표", "1. 숫자"])
+        md_layout.addRow("목록 기호:", self.combo_md_list)
+        
+        self.combo_md_qa = QComboBox()
+        self.combo_md_qa.addItems(["> 인용문 스타일", "**Q:** 굵게 스타일", "### Q: 헤딩 스타일"])
+        md_layout.addRow("Q&A 표현:", self.combo_md_qa)
+        
+        self.combo_md_narrative = QComboBox()
+        self.combo_md_narrative.addItems(["짧은 문장 (모바일 최적화)", "긴 문장 (PC 최적화)"])
+        md_layout.addRow("서술 방식:", self.combo_md_narrative)
+        
+        self.output_tabs.addTab(md_widget, "📝 Markdown 설정")
+        
+        # HTML 설정 탭
+        html_widget = QWidget()
+        html_layout = QFormLayout(html_widget)
+        
+        self.combo_html_title = QComboBox()
+        self.combo_html_title.addItems(["<h2> 태그", "<h3> 태그", "<strong> 굵게만"])
+        html_layout.addRow("제목 스타일:", self.combo_html_title)
+        
+        self.combo_html_qa = QComboBox()
+        self.combo_html_qa.addItems(["<blockquote> 인용", "<div class='qa'> 커스텀", "<details> 접기형"])
+        html_layout.addRow("Q&A 스타일:", self.combo_html_qa)
+        
+        self.combo_html_color = QComboBox()
+        self.combo_html_color.addItems(["네이버 그린 (#03C75A)", "블루 (#4A90E2)", "오렌지 (#F39C12)", "그레이 (#666)"])
+        html_layout.addRow("테마 컬러:", self.combo_html_color)
+        
+        self.combo_html_font = QComboBox()
+        self.combo_html_font.addItems(["기본 (시스템)", "나눔고딕", "맑은 고딕"])
+        html_layout.addRow("본문 폰트:", self.combo_html_font)
+        
+        self.combo_html_box = QComboBox()
+        self.combo_html_box.addItems(["배경색 박스", "테두리 박스", "없음"])
+        html_layout.addRow("강조 박스:", self.combo_html_box)
+        
+        self.output_tabs.addTab(html_widget, "🌐 HTML 설정")
+        
+        output_layout.addWidget(self.output_tabs)
+        group_output.setLayout(output_layout)
+        layout.addWidget(group_output)
+
+        # 6. 실행 버튼
         btn_layout = QHBoxLayout()
         self.btn_gen_only = QPushButton("🔍 원고 생성만 (미리보기)")
         self.btn_gen_only.setStyleSheet("background-color: #5D5D5D; color: white; font-weight: bold; padding: 12px;")
@@ -313,12 +448,24 @@ class InfoTab(QWidget):
         btn_layout.addWidget(self.btn_full_auto)
         layout.addLayout(btn_layout)
 
-        # 6. 결과 뷰어 (단순화 - 텍스트만)
-        layout.addWidget(QLabel("📝 생성된 글 미리보기 (수정 후 발행 가능)"))
-        self.view_result = QTextEdit()
-        self.view_result.setMinimumHeight(350)
-        self.view_result.setPlaceholderText("생성된 글이 여기에 표시됩니다. 직접 수정도 가능합니다.")
-        layout.addWidget(self.view_result)
+        # 7. 결과 뷰어 (탭으로 TEXT/MARKDOWN/HTML 표시)
+        layout.addWidget(QLabel("📝 생성된 글 미리보기"))
+        self.result_tabs = QTabWidget()
+        
+        self.view_text = QTextEdit()
+        self.view_text.setPlaceholderText("TEXT 형식 결과가 여기에 표시됩니다.")
+        self.result_tabs.addTab(self.view_text, "📄 Text")
+        
+        self.view_markdown = QTextEdit()
+        self.view_markdown.setPlaceholderText("Markdown 형식 결과가 여기에 표시됩니다.")
+        self.result_tabs.addTab(self.view_markdown, "📝 Markdown")
+        
+        self.view_html = QTextEdit()
+        self.view_html.setPlaceholderText("HTML 형식 결과가 여기에 표시됩니다.")
+        self.result_tabs.addTab(self.view_html, "🌐 HTML")
+        
+        self.result_tabs.setMinimumHeight(350)
+        layout.addWidget(self.result_tabs)
 
         # 하단 발행 버튼
         self.btn_publish_now = QPushButton("📤 현재 내용으로 발행하기")
@@ -456,7 +603,7 @@ class InfoTab(QWidget):
         self.log_signal.emit(f"❌ {error_msg}")
 
     def generate_images(self):
-        """AI 이미지 생성"""
+        """AI 이미지 생성 (썸네일 + 삽화)"""
         topic = self.get_selected_topic()
         if not topic:
             QMessageBox.warning(self, "경고", "먼저 주제를 선택하거나 입력해주세요.")
@@ -466,35 +613,93 @@ class InfoTab(QWidget):
             QMessageBox.warning(self, "인증 필요", "이미지 생성은 로그인이 필요합니다.")
             return
         
-        count = self.spin_image_count.value()
+        gen_thumbnail = self.chk_thumbnail.isChecked()
+        gen_illust = self.chk_illustration.isChecked()
+        illust_count = self.spin_illust_count.value() if gen_illust else 0
+        
+        if not gen_thumbnail and illust_count == 0:
+            QMessageBox.warning(self, "경고", "생성할 이미지를 선택해주세요.")
+            return
         
         self.btn_gen_images.setEnabled(False)
-        self.btn_gen_images.setText(f"⏳ 생성 중... (0/{count})")
-        
-        # 기존 이미지 클리어
         self.clear_image_previews()
         
-        self.image_worker = ImageGenerateWorker(topic, count, self.auth_token)
-        self.image_worker.progress.connect(self.on_image_progress)
-        self.image_worker.finished.connect(self.on_images_finished)
-        self.image_worker.error.connect(self.on_image_error)
-        self.image_worker.start()
+        # 썸네일 생성
+        if gen_thumbnail:
+            self.btn_gen_images.setText("⏳ 썸네일 생성 중...")
+            self.thumbnail_worker = ImageGenerateWorker(topic, 1, self.auth_token, "thumbnail")
+            self.thumbnail_worker.finished.connect(self.on_thumbnail_finished)
+            self.thumbnail_worker.error.connect(self.on_image_error)
+            self.thumbnail_worker.start()
+            self.log_signal.emit(f"🖼️ '{topic}' 썸네일 이미지 생성 중...")
         
-        self.log_signal.emit(f"🖼️ '{topic}' 관련 이미지 {count}장 생성 중...")
+        # 삽화 생성
+        if illust_count > 0:
+            if gen_thumbnail:
+                # 썸네일 완료 후 삽화 생성하도록 대기
+                self._pending_illust = (topic, illust_count)
+            else:
+                self._start_illustration_generation(topic, illust_count)
 
-    def on_image_progress(self, current: int, total: int):
-        """이미지 생성 진행률"""
-        self.btn_gen_images.setText(f"⏳ 생성 중... ({current}/{total})")
+    def _start_illustration_generation(self, topic: str, count: int):
+        """삽화 이미지 생성 시작"""
+        self.btn_gen_images.setText(f"⏳ 삽화 생성 중... (0/{count})")
+        self.illustration_worker = ImageGenerateWorker(topic, count, self.auth_token, "illustration")
+        self.illustration_worker.progress.connect(self.on_illust_progress)
+        self.illustration_worker.finished.connect(self.on_illustrations_finished)
+        self.illustration_worker.error.connect(self.on_image_error)
+        self.illustration_worker.start()
+        self.log_signal.emit(f"🎨 '{topic}' 본문 삽화 {count}장 생성 중...")
 
-    def on_images_finished(self, images: list):
-        """이미지 생성 완료"""
+    def on_thumbnail_finished(self, images: list):
+        """썸네일 생성 완료"""
+        if images:
+            self.thumbnail_images = images
+            img_base64 = images[0]
+            
+            try:
+                img_data = base64.b64decode(img_base64)
+                qimg = QImage.fromData(img_data)
+                pixmap = QPixmap.fromImage(qimg)
+                scaled = pixmap.scaled(200, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.thumbnail_preview.setPixmap(scaled)
+                self.chk_use_thumbnail.setEnabled(True)
+                self.chk_use_thumbnail.setChecked(True)
+            except:
+                self.thumbnail_preview.setText("로드 실패")
+            
+            self.log_signal.emit("✅ 썸네일 이미지 생성 완료!")
+        
+        # 대기 중인 삽화 생성 시작
+        if hasattr(self, '_pending_illust') and self._pending_illust:
+            topic, count = self._pending_illust
+            self._pending_illust = None
+            self._start_illustration_generation(topic, count)
+        else:
+            self.btn_gen_images.setEnabled(True)
+            self.btn_gen_images.setText("🖼️ 선택한 이미지 생성하기")
+
+    def on_illust_progress(self, current: int, total: int):
+        """삽화 생성 진행률"""
+        self.btn_gen_images.setText(f"⏳ 삽화 생성 중... ({current}/{total})")
+
+    def on_illustrations_finished(self, images: list):
+        """삽화 생성 완료"""
         self.btn_gen_images.setEnabled(True)
-        self.btn_gen_images.setText("🖼️ 이미지 생성")
+        self.btn_gen_images.setText("🖼️ 선택한 이미지 생성하기")
         
-        self.generated_images = images
+        self.illustration_images = images
         
-        # 이미지 미리보기 및 체크박스 표시
+        # 삽화 미리보기 및 체크박스 표시
         for i, img_base64 in enumerate(images):
+            row = i // 2
+            col = i % 2
+            
+            # 미리보기 + 체크박스 컨테이너
+            container = QWidget()
+            container_layout = QVBoxLayout(container)
+            container_layout.setContentsMargins(5, 5, 5, 5)
+            
             # 미리보기 라벨
             preview = QLabel()
             preview.setFixedSize(150, 100)
@@ -509,49 +714,98 @@ class InfoTab(QWidget):
             except:
                 preview.setText("로드 실패")
             
-            self.image_preview_layout.addWidget(preview)
+            container_layout.addWidget(preview)
             
             # 체크박스
-            chk = QCheckBox(f"이미지 {i+1} 삽입")
+            chk = QCheckBox(f"삽화 {i+1} 삽입")
             chk.setChecked(True)
-            self.image_checkboxes.append(chk)
-            self.image_checkbox_layout.addWidget(chk)
+            self.illust_checkboxes.append(chk)
+            container_layout.addWidget(chk)
+            
+            self.illust_preview_layout.addWidget(container, row, col)
         
-        self.log_signal.emit(f"✅ {len(images)}개의 이미지가 생성되었습니다. 삽입할 이미지를 선택하세요.")
+        self.log_signal.emit(f"✅ {len(images)}개의 삽화 이미지가 생성되었습니다.")
 
     def on_image_error(self, error_msg: str):
         """이미지 생성 에러"""
         self.btn_gen_images.setEnabled(True)
-        self.btn_gen_images.setText("🖼️ 이미지 생성")
+        self.btn_gen_images.setText("🖼️ 선택한 이미지 생성하기")
         self.log_signal.emit(f"❌ {error_msg}")
+        self._pending_illust = None
 
     def clear_image_previews(self):
         """이미지 미리보기 클리어"""
-        while self.image_preview_layout.count():
-            item = self.image_preview_layout.takeAt(0)
+        # 썸네일 클리어
+        self.thumbnail_preview.clear()
+        self.thumbnail_preview.setText("썸네일 미리보기")
+        self.chk_use_thumbnail.setChecked(False)
+        self.chk_use_thumbnail.setEnabled(False)
+        self.thumbnail_images = []
+        
+        # 삽화 클리어
+        while self.illust_preview_layout.count():
+            item = self.illust_preview_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         
-        while self.image_checkbox_layout.count():
-            item = self.image_checkbox_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        
-        self.image_checkboxes = []
-        self.generated_images = []
+        self.illust_checkboxes = []
+        self.illustration_images = []
+        self._pending_illust = None
 
-    def get_selected_images(self) -> list:
-        """선택된 이미지 base64 리스트 반환"""
-        selected = []
-        for i, chk in enumerate(self.image_checkboxes):
-            if chk.isChecked() and i < len(self.generated_images):
-                selected.append(self.generated_images[i])
-        return selected
+    def get_output_style_settings(self) -> dict:
+        """출력 스타일 설정값 가져오기"""
+        return {
+            "text": {
+                "heading": self.combo_text_heading.currentText(),
+                "emphasis": self.combo_text_emphasis.currentText(),
+                "divider": self.combo_text_divider.currentText(),
+                "spacing": self.combo_text_spacing.currentText(),
+            },
+            "markdown": {
+                "heading": self.combo_md_heading.currentText(),
+                "list": self.combo_md_list.currentText(),
+                "qa": self.combo_md_qa.currentText(),
+                "narrative": self.combo_md_narrative.currentText(),
+            },
+            "html": {
+                "title": self.combo_html_title.currentText(),
+                "qa": self.combo_html_qa.currentText(),
+                "color": self.combo_html_color.currentText(),
+                "font": self.combo_html_font.currentText(),
+                "box": self.combo_html_box.currentText(),
+            }
+        }
+
+    def get_selected_images(self) -> dict:
+        """선택된 이미지들 반환"""
+        result = {
+            "thumbnail": None,
+            "illustrations": []
+        }
+        
+        # 썸네일
+        if self.chk_use_thumbnail.isChecked() and self.thumbnail_images:
+            result["thumbnail"] = self.thumbnail_images[0]
+        
+        # 삽화
+        for i, chk in enumerate(self.illust_checkboxes):
+            if chk.isChecked() and i < len(self.illustration_images):
+                result["illustrations"].append(self.illustration_images[i])
+        
+        return result
 
     def request_start(self, action="full"):
         """작업 시작 요청"""
         if action == "publish_only":
-            current_content = self.view_result.toPlainText()
+            # 현재 탭에서 내용 가져오기
+            current_tab = self.result_tabs.currentIndex()
+            if current_tab == 0:
+                current_content = self.view_text.toPlainText()
+            elif current_tab == 1:
+                current_content = self.view_markdown.toPlainText()
+            else:
+                current_content = self.view_html.toPlainText()
+            
             if not current_content:
                 QMessageBox.warning(self, "경고", "발행할 내용이 없습니다.")
                 return
@@ -580,7 +834,10 @@ class InfoTab(QWidget):
                      if self.list_questions.item(i).checkState() == Qt.Checked]
 
         # 선택된 이미지 포함
-        selected_images = self.get_selected_images() if self.group_image.isChecked() else []
+        selected_images = self.get_selected_images() if self.group_image.isChecked() else {"thumbnail": None, "illustrations": []}
+        
+        # 출력 스타일 설정
+        output_style = self.get_output_style_settings()
 
         data = {
             "action": action, "mode": "info", "topic": topic,
@@ -588,7 +845,8 @@ class InfoTab(QWidget):
             "emoji_level": self.combo_emoji.currentText(), "targets": targets,
             "questions": questions, "summary": self.txt_summary.toPlainText(),
             "insight": self.txt_insight.toPlainText(),
-            "images": selected_images  # base64 이미지 리스트
+            "images": selected_images,  # {"thumbnail": base64 or None, "illustrations": [base64, ...]}
+            "output_style": output_style  # 출력 스타일 설정
         }
         self.start_signal.emit(data)
 
@@ -597,9 +855,17 @@ class InfoTab(QWidget):
         title = result_data.get("title", "제목 없음")
         content = result_data.get("content", "") or result_data.get("content_text", "")
         
-        # 단순 텍스트로 표시
-        result_text = f"제목: {title}\n\n{'=' * 50}\n\n{content}"
-        self.view_result.setText(result_text)
+        # TEXT 형식
+        text_result = f"제목: {title}\n\n{'=' * 50}\n\n{content}"
+        self.view_text.setText(text_result)
+        
+        # MARKDOWN 형식
+        md_result = f"# {title}\n\n{content}"
+        self.view_markdown.setText(md_result)
+        
+        # HTML 형식
+        html_result = f"<h1>{title}</h1>\n\n{content.replace(chr(10), '<br>')}"
+        self.view_html.setText(html_result)
         
         self.btn_publish_now.setEnabled(True)
         self.log_signal.emit("✨ 글 생성 완료! 내용을 확인하고 필요시 수정 후 발행하세요.")
