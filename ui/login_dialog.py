@@ -1,6 +1,6 @@
 """
 Firebase 로그인 다이얼로그
-회원가입, 로그인, 사용자 정보 관리
+회원가입, 로그인, 비밀번호 찾기, 사용자 정보 관리
 """
 import json
 import requests
@@ -8,7 +8,7 @@ import os
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLineEdit, QPushButton, QLabel, QMessageBox,
-    QTabWidget, QWidget, QGroupBox
+    QTabWidget, QWidget
 )
 from PySide6.QtCore import Signal, QSettings
 
@@ -24,7 +24,7 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "https://generate-blog-post-yahp6ia2
 
 
 class LoginDialog(QDialog):
-    """로그인/회원가입 다이얼로그"""
+    """로그인/회원가입/비밀번호찾기 다이얼로그"""
     
     login_success = Signal(dict)  # 로그인 성공 시 사용자 정보 전달
     
@@ -35,8 +35,9 @@ class LoginDialog(QDialog):
         self.current_user = None
         self.id_token = None
         
-        self.setWindowTitle("🔐 로그인")
-        self.setMinimumWidth(400)
+        self.setWindowTitle("🔐 Auto Blogger Pro 로그인")
+        self.setMinimumWidth(420)
+        self.setModal(True)
         self.init_ui()
         
         # 저장된 로그인 정보 로드
@@ -45,10 +46,16 @@ class LoginDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # 탭 위젯 (로그인 / 회원가입)
+        # 앱 로고/타이틀
+        title_label = QLabel("🚗 Auto Blogger Pro")
+        title_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #03C75A; margin: 10px 0;")
+        title_label.setAlignment(Qt.AlignCenter if hasattr(Qt, 'AlignCenter') else 0x0004)
+        layout.addWidget(title_label)
+        
+        # 탭 위젯 (로그인 / 회원가입 / 비밀번호 찾기)
         self.tabs = QTabWidget()
         
-        # 로그인 탭
+        # ===== 로그인 탭 =====
         login_tab = QWidget()
         login_layout = QVBoxLayout()
         
@@ -58,6 +65,7 @@ class LoginDialog(QDialog):
         self.login_password = QLineEdit()
         self.login_password.setEchoMode(QLineEdit.Password)
         self.login_password.setPlaceholderText("비밀번호")
+        self.login_password.returnPressed.connect(self.do_login)  # 엔터키로 로그인
         
         login_form.addRow("이메일:", self.login_email)
         login_form.addRow("비밀번호:", self.login_password)
@@ -68,15 +76,22 @@ class LoginDialog(QDialog):
         self.btn_login.clicked.connect(self.do_login)
         login_layout.addWidget(self.btn_login)
         
-        # 로그인 상태 저장 체크박스 대신 자동 저장
+        # 마지막 로그인 정보
         self.login_status = QLabel("")
-        self.login_status.setStyleSheet("color: #666;")
+        self.login_status.setStyleSheet("color: #666; font-size: 11px;")
         login_layout.addWidget(self.login_status)
+        
+        # 비밀번호 찾기 링크
+        self.btn_forgot = QPushButton("비밀번호를 잊으셨나요?")
+        self.btn_forgot.setStyleSheet("border: none; color: #4A90E2; text-decoration: underline; padding: 5px;")
+        self.btn_forgot.setCursor(Qt.PointingHandCursor if hasattr(Qt, 'PointingHandCursor') else 13)
+        self.btn_forgot.clicked.connect(lambda: self.tabs.setCurrentIndex(2))
+        login_layout.addWidget(self.btn_forgot)
         
         login_tab.setLayout(login_layout)
         self.tabs.addTab(login_tab, "로그인")
         
-        # 회원가입 탭
+        # ===== 회원가입 탭 =====
         register_tab = QWidget()
         register_layout = QVBoxLayout()
         
@@ -113,12 +128,43 @@ class LoginDialog(QDialog):
         register_tab.setLayout(register_layout)
         self.tabs.addTab(register_tab, "회원가입")
         
+        # ===== 비밀번호 찾기 탭 =====
+        reset_tab = QWidget()
+        reset_layout = QVBoxLayout()
+        
+        reset_info = QLabel("가입한 이메일 주소를 입력하시면\n비밀번호 재설정 링크를 보내드립니다.")
+        reset_info.setStyleSheet("color: #666; font-size: 12px; margin: 10px 0;")
+        reset_layout.addWidget(reset_info)
+        
+        reset_form = QFormLayout()
+        self.reset_email = QLineEdit()
+        self.reset_email.setPlaceholderText("example@email.com")
+        reset_form.addRow("이메일:", self.reset_email)
+        reset_layout.addLayout(reset_form)
+        
+        self.btn_reset = QPushButton("📧 비밀번호 재설정 링크 보내기")
+        self.btn_reset.setStyleSheet("background-color: #9B59B6; color: white; font-weight: bold; padding: 12px;")
+        self.btn_reset.clicked.connect(self.do_reset_password)
+        reset_layout.addWidget(self.btn_reset)
+        
+        # 로그인으로 돌아가기
+        self.btn_back_login = QPushButton("← 로그인으로 돌아가기")
+        self.btn_back_login.setStyleSheet("border: none; color: #4A90E2; padding: 5px;")
+        self.btn_back_login.clicked.connect(lambda: self.tabs.setCurrentIndex(0))
+        reset_layout.addWidget(self.btn_back_login)
+        
+        reset_layout.addStretch()
+        reset_tab.setLayout(reset_layout)
+        self.tabs.addTab(reset_tab, "비밀번호 찾기")
+        
         layout.addWidget(self.tabs)
         
-        # 하단 버튼
+        # 하단 취소 버튼
         btn_layout = QHBoxLayout()
-        self.btn_cancel = QPushButton("취소")
+        self.btn_cancel = QPushButton("❌ 종료")
+        self.btn_cancel.setStyleSheet("background-color: #95A5A6; color: white; padding: 8px;")
         self.btn_cancel.clicked.connect(self.reject)
+        btn_layout.addStretch()
         btn_layout.addWidget(self.btn_cancel)
         layout.addLayout(btn_layout)
         
@@ -127,7 +173,6 @@ class LoginDialog(QDialog):
     def load_saved_credentials(self):
         """저장된 로그인 정보 로드"""
         saved_email = self.settings.value("auth_email", "")
-        saved_token = self.settings.value("auth_token", "")
         
         if saved_email:
             self.login_email.setText(saved_email)
@@ -175,7 +220,6 @@ class LoginDialog(QDialog):
                 # 로그인 정보 저장
                 self.save_credentials(email, self.id_token, data)
                 
-                QMessageBox.information(self, "로그인 성공", f"환영합니다, {email}!")
                 self.login_success.emit(self.current_user)
                 self.accept()
             else:
@@ -275,10 +319,64 @@ class LoginDialog(QDialog):
             self.btn_register.setEnabled(True)
             self.btn_register.setText("📝 회원가입")
     
+    def do_reset_password(self):
+        """비밀번호 재설정 이메일 발송"""
+        email = self.reset_email.text().strip()
+        
+        if not email:
+            QMessageBox.warning(self, "입력 오류", "이메일 주소를 입력해주세요.")
+            return
+        
+        self.btn_reset.setEnabled(False)
+        self.btn_reset.setText("⏳ 발송 중...")
+        
+        try:
+            # Firebase Auth REST API - 비밀번호 재설정
+            url = f"{FIREBASE_AUTH_URL}:sendOobCode?key={self.api_key}"
+            payload = {
+                "requestType": "PASSWORD_RESET",
+                "email": email
+            }
+            
+            response = requests.post(url, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                QMessageBox.information(
+                    self,
+                    "이메일 발송 완료",
+                    f"비밀번호 재설정 링크가 발송되었습니다.\n\n"
+                    f"📧 {email}\n\n"
+                    f"이메일을 확인하여 비밀번호를 재설정해주세요.\n"
+                    f"(스팸함도 확인해주세요)"
+                )
+                
+                # 로그인 탭으로 전환
+                self.tabs.setCurrentIndex(0)
+                self.login_email.setText(email)
+                
+            else:
+                error_data = response.json()
+                error_msg = error_data.get("error", {}).get("message", "발송 실패")
+                
+                error_messages = {
+                    "EMAIL_NOT_FOUND": "등록되지 않은 이메일입니다.",
+                    "INVALID_EMAIL": "올바른 이메일 형식이 아닙니다."
+                }
+                
+                display_msg = error_messages.get(error_msg, error_msg)
+                QMessageBox.warning(self, "발송 실패", display_msg)
+                
+        except requests.Timeout:
+            QMessageBox.warning(self, "오류", "서버 응답 시간 초과")
+        except Exception as e:
+            QMessageBox.warning(self, "오류", f"발송 중 오류 발생: {str(e)}")
+        finally:
+            self.btn_reset.setEnabled(True)
+            self.btn_reset.setText("📧 비밀번호 재설정 링크 보내기")
+    
     def _create_firestore_user(self, id_token: str, email: str):
         """회원가입 후 Firestore에 사용자 문서 즉시 생성"""
         try:
-            # Backend API를 호출하여 user_info 모드로 사용자 문서 생성 유도
             headers = {
                 "Authorization": f"Bearer {id_token}",
                 "Content-Type": "application/json"
@@ -311,87 +409,8 @@ class LoginDialog(QDialog):
         return self.current_user or {}
 
 
-class UserInfoWidget(QWidget):
-    """사용자 정보 표시 위젯"""
-    
-    logout_signal = Signal()
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.settings = QSettings("MySoft", "NaverBlogBot")
-        self.user_data = {}
-        self.init_ui()
-    
-    def init_ui(self):
-        layout = QVBoxLayout()
-        
-        # 사용자 정보 그룹
-        group = QGroupBox("👤 사용자 정보")
-        group_layout = QFormLayout()
-        
-        self.lbl_email = QLabel("-")
-        self.lbl_plan = QLabel("-")
-        self.lbl_status = QLabel("-")
-        self.lbl_daily_usage = QLabel("-")
-        self.lbl_monthly_usage = QLabel("-")
-        
-        group_layout.addRow("이메일:", self.lbl_email)
-        group_layout.addRow("플랜:", self.lbl_plan)
-        group_layout.addRow("상태:", self.lbl_status)
-        group_layout.addRow("오늘 이미지:", self.lbl_daily_usage)
-        group_layout.addRow("이번 달:", self.lbl_monthly_usage)
-        
-        group.setLayout(group_layout)
-        layout.addWidget(group)
-        
-        # 로그아웃 버튼
-        self.btn_logout = QPushButton("🚪 로그아웃")
-        self.btn_logout.setStyleSheet("background-color: #E74C3C; color: white; padding: 10px;")
-        self.btn_logout.clicked.connect(self.do_logout)
-        layout.addWidget(self.btn_logout)
-        
-        layout.addStretch()
-        self.setLayout(layout)
-    
-    def update_user_info(self, user_data: dict):
-        """사용자 정보 업데이트"""
-        self.user_data = user_data
-        
-        self.lbl_email.setText(user_data.get("email", "-"))
-        
-        is_active = user_data.get("is_active", False)
-        if is_active:
-            self.lbl_plan.setText("정식 사용자")
-        else:
-            self.lbl_plan.setText("승인 대기")
-        
-        is_active = user_data.get("is_active", False)
-        if is_active:
-            self.lbl_status.setText("✅ 활성")
-            self.lbl_status.setStyleSheet("color: #27AE60; font-weight: bold;")
-        else:
-            self.lbl_status.setText("❌ 비활성 (결제 필요)")
-            self.lbl_status.setStyleSheet("color: #E74C3C; font-weight: bold;")
-        
-        usage = user_data.get("usage", {})
-        daily = usage.get("daily_image_count", 0)
-        monthly = usage.get("monthly_image_count", 0)
-        
-        self.lbl_daily_usage.setText(f"{daily}장 사용")
-        self.lbl_monthly_usage.setText(f"{monthly}장 사용")
-    
-    def do_logout(self):
-        """로그아웃"""
-        self.settings.remove("auth_token")
-        self.settings.remove("auth_uid")
-        # 이메일은 유지 (다음 로그인 편의)
-        
-        self.user_data = {}
-        self.lbl_email.setText("-")
-        self.lbl_plan.setText("-")
-        self.lbl_status.setText("-")
-        self.lbl_daily_usage.setText("-")
-        self.lbl_monthly_usage.setText("-")
-        
-        self.logout_signal.emit()
-        QMessageBox.information(self, "로그아웃", "로그아웃 되었습니다.")
+# Qt import 보완
+try:
+    from PySide6.QtCore import Qt
+except:
+    pass

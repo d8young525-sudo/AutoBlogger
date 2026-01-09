@@ -1,16 +1,18 @@
 """
 정보성 글쓰기 탭 - 블로그 포스팅 자동 생성 기능
-UX 개선: 드롭다운/직접입력 상호배타, AI 추천 상태표시
+UX 개선: 드롭다운/직접입력 상호배타, AI 추천 상태표시, 이미지 생성 옵션
 """
 import requests
 import markdown
 import re
+import base64
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout, 
                                QComboBox, QLineEdit, QPushButton, QRadioButton, 
                                QButtonGroup, QLabel, QMessageBox, QScrollArea, 
                                QListWidget, QListWidgetItem, QTextEdit, QTabWidget, QCheckBox,
-                               QAbstractItemView, QFrame)
+                               QAbstractItemView, QFrame, QSpinBox)
 from PySide6.QtCore import Qt, Signal, QThread
+from PySide6.QtGui import QPixmap, QImage
 
 BACKEND_URL = "https://generate-blog-post-yahp6ia25q-du.a.run.app"
 
@@ -56,6 +58,56 @@ class RecommendWorker(QThread):
             self.error.emit(f"통신 오류: {str(e)}")
 
 
+class ImageGenerateWorker(QThread):
+    """이미지 생성 워커 스레드"""
+    finished = Signal(list)  # [(image_data, base64_str), ...]
+    progress = Signal(int, int)  # current, total
+    error = Signal(str)
+    
+    def __init__(self, topic: str, count: int, auth_token: str):
+        super().__init__()
+        self.topic = topic
+        self.count = count
+        self.auth_token = auth_token
+    
+    def run(self):
+        try:
+            results = []
+            
+            for i in range(self.count):
+                self.progress.emit(i + 1, self.count)
+                
+                headers = {"Authorization": f"Bearer {self.auth_token}"}
+                payload = {
+                    "mode": "generate_image",
+                    "prompt": self.topic,
+                    "style": "블로그 썸네일"
+                }
+                
+                response = requests.post(
+                    BACKEND_URL, 
+                    json=payload, 
+                    headers=headers,
+                    timeout=120
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("success") and data.get("image_base64"):
+                        results.append(data["image_base64"])
+                elif response.status_code == 403:
+                    self.error.emit("이미지 생성 권한이 없거나 한도를 초과했습니다.")
+                    return
+                else:
+                    self.error.emit(f"이미지 생성 실패: {response.status_code}")
+                    return
+            
+            self.finished.emit(results)
+            
+        except Exception as e:
+            self.error.emit(f"이미지 생성 오류: {str(e)}")
+
+
 class InfoTab(QWidget):
     """정보성 글쓰기 탭"""
     start_signal = Signal(dict) 
@@ -65,7 +117,14 @@ class InfoTab(QWidget):
         super().__init__()
         self.recommend_worker = None
         self.analysis_worker = None
+        self.image_worker = None
+        self.generated_images = []  # base64 이미지 리스트
+        self.auth_token = ""
         self.init_ui()
+
+    def set_auth_token(self, token: str):
+        """인증 토큰 설정"""
+        self.auth_token = token
 
     def init_ui(self):
         main_layout = QVBoxLayout()
@@ -107,7 +166,7 @@ class InfoTab(QWidget):
         # 추천 주제 표시 영역
         self.topic_area = QScrollArea()
         self.topic_area.setWidgetResizable(True)
-        self.topic_area.setMinimumHeight(200) 
+        self.topic_area.setMinimumHeight(180) 
         self.topic_widget = QWidget()
         self.topic_group = QButtonGroup()
         self.topic_layout_inner = QVBoxLayout(self.topic_widget)
@@ -159,8 +218,8 @@ class InfoTab(QWidget):
         group_opt.setLayout(form_opt)
         layout.addWidget(group_opt)
 
-        # 3. 세부 설정
-        self.group_adv = QGroupBox("3. 세부 설정 (고도화)")
+        # 3. 세부 설정 (접을 수 있음)
+        self.group_adv = QGroupBox("3. 세부 설정 (선택)")
         self.group_adv.setCheckable(True)
         self.group_adv.setChecked(False)
         adv_layout = QVBoxLayout()
@@ -178,80 +237,69 @@ class InfoTab(QWidget):
         self.target_layout.setAlignment(Qt.AlignTop)
         self.target_layout.setContentsMargins(0, 0, 0, 0)
         
-        # 타깃 독자 스크롤 영역
         target_scroll = QScrollArea()
         target_scroll.setWidgetResizable(True)
-        target_scroll.setMinimumHeight(120)
-        target_scroll.setMaximumHeight(150)
+        target_scroll.setMinimumHeight(100)
+        target_scroll.setMaximumHeight(120)
         target_scroll.setWidget(self.target_widget)
         adv_layout.addWidget(target_scroll)
         
         adv_layout.addWidget(QLabel("❓ 예상 질문 (선택):"))
         self.list_questions = QListWidget()
-        self.list_questions.setMinimumHeight(150)
+        self.list_questions.setMinimumHeight(120)
         adv_layout.addWidget(self.list_questions)
         
-        adv_layout.addWidget(QLabel("📌 핵심 정보 요약 (AI 자동 생성):"))
+        adv_layout.addWidget(QLabel("📌 핵심 정보 요약:"))
         self.txt_summary = QTextEdit()
-        self.txt_summary.setMinimumHeight(100)
+        self.txt_summary.setMinimumHeight(80)
         adv_layout.addWidget(self.txt_summary)
         
         adv_layout.addWidget(QLabel("💡 나만의 인사이트 (직접 입력):"))
         self.txt_insight = QTextEdit()
-        self.txt_insight.setMinimumHeight(100)
+        self.txt_insight.setMinimumHeight(80)
         adv_layout.addWidget(self.txt_insight)
         
         self.group_adv.setLayout(adv_layout)
         layout.addWidget(self.group_adv)
 
-        # 4. 출력 스타일 설정
-        group_style = QGroupBox("4. 출력 스타일 설정 (Format Options)")
-        group_style.setCheckable(True)
-        group_style.setChecked(True)
-        style_layout = QVBoxLayout()
-        self.style_tabs = QTabWidget()
-
-        tab_text = QWidget(); form_text = QFormLayout()
-        self.txt_subhead = QComboBox(); self.txt_subhead.addItems(["▶ 소제목", "# 소제목", "[소제목]", "1. 소제목"])
-        self.txt_emphasis = QComboBox(); self.txt_emphasis.addItems(["*강조*", "**강조**", "「강조」", '"강조"'])
-        self.txt_divider = QComboBox(); self.txt_divider.addItems(["===", "---", "(빈 줄만)"])
-        self.txt_body_style = QComboBox(); self.txt_body_style.addItems(["기본 간격", "넓은 간격 (가독성 UP)"]) 
-        form_text.addRow("소제목 기호:", self.txt_subhead)
-        form_text.addRow("강조 표현:", self.txt_emphasis)
-        form_text.addRow("구분선:", self.txt_divider)
-        form_text.addRow("문단 간격:", self.txt_body_style)
-        tab_text.setLayout(form_text)
-        self.style_tabs.addTab(tab_text, "Text 설정")
-
-        tab_md = QWidget(); form_md = QFormLayout()
-        self.md_heading = QComboBox(); self.md_heading.addItems(["H2 (##)", "H3 (###)", "H4 (####)"])
-        self.md_list = QComboBox(); self.md_list.addItems(["- 리스트", "* 리스트", "1. 리스트"])
-        self.md_qa = QComboBox(); self.md_qa.addItems(["인용구 (>)", "굵게 (**Q**)", "일반 텍스트"])
-        self.md_body_style = QComboBox(); self.md_body_style.addItems(["줄글(서술형) 위주", "개조식(리스트) 위주"])
-        form_md.addRow("시작 헤딩:", self.md_heading)
-        form_md.addRow("목록 기호:", self.md_list)
-        form_md.addRow("Q&A 표현:", self.md_qa)
-        form_md.addRow("서술 방식:", self.md_body_style)
-        tab_md.setLayout(form_md)
-        self.style_tabs.addTab(tab_md, "Markdown 설정")
-
-        tab_html = QWidget(); form_html = QFormLayout()
-        self.html_title_style = QComboBox(); self.html_title_style.addItems(["기본 (심플)", "밑줄 (Border Bottom)", "배경색 (Box)"])
-        self.html_qa_style = QComboBox(); self.html_qa_style.addItems(["기본", "박스형 (Border)", "아코디언 (Details)"])
-        self.html_color = QComboBox(); self.html_color.addItems(["네이버 그린", "모던 블랙", "트러스트 블루", "웜 오렌지"])
-        self.html_font_size = QComboBox(); self.html_font_size.addItems(["기본 (16px)", "조금 크게 (18px)", "시원하게 (20px)"])
-        self.html_highlight = QComboBox(); self.html_highlight.addItems(["없음", "중요 문단 회색 박스", "중요 문단 컬러 박스"])
-        form_html.addRow("제목 스타일:", self.html_title_style)
-        form_html.addRow("Q&A 스타일:", self.html_qa_style)
-        form_html.addRow("테마 컬러:", self.html_color)
-        form_html.addRow("본문 폰트:", self.html_font_size)
-        form_html.addRow("강조 박스:", self.html_highlight)
-        tab_html.setLayout(form_html)
-        self.style_tabs.addTab(tab_html, "HTML 설정")
-
-        style_layout.addWidget(self.style_tabs)
-        group_style.setLayout(style_layout)
-        layout.addWidget(group_style)
+        # 4. 이미지 생성 (새로 추가)
+        group_image = QGroupBox("4. 썸네일 이미지 생성 (선택)")
+        group_image.setCheckable(True)
+        group_image.setChecked(False)
+        image_layout = QVBoxLayout()
+        
+        # 이미지 생성 옵션
+        img_option_layout = QHBoxLayout()
+        img_option_layout.addWidget(QLabel("생성할 이미지 수:"))
+        self.spin_image_count = QSpinBox()
+        self.spin_image_count.setRange(1, 3)
+        self.spin_image_count.setValue(1)
+        img_option_layout.addWidget(self.spin_image_count)
+        img_option_layout.addStretch()
+        
+        self.btn_gen_images = QPushButton("🖼️ 이미지 생성")
+        self.btn_gen_images.clicked.connect(self.generate_images)
+        self.btn_gen_images.setStyleSheet("background-color: #9B59B6; color: white; padding: 8px;")
+        img_option_layout.addWidget(self.btn_gen_images)
+        image_layout.addLayout(img_option_layout)
+        
+        # 이미지 안내
+        img_notice = QLabel("💡 주제에 맞는 블로그 썸네일 이미지를 AI가 생성합니다. (글씨 없는 이미지)")
+        img_notice.setStyleSheet("color: #666; font-size: 11px;")
+        image_layout.addWidget(img_notice)
+        
+        # 생성된 이미지 표시 영역
+        self.image_preview_layout = QHBoxLayout()
+        image_layout.addLayout(self.image_preview_layout)
+        
+        # 이미지 삽입 여부 체크박스들
+        self.image_checkboxes = []
+        self.image_checkbox_layout = QHBoxLayout()
+        image_layout.addLayout(self.image_checkbox_layout)
+        
+        group_image.setLayout(image_layout)
+        layout.addWidget(group_image)
+        self.group_image = group_image
 
         # 5. 실행 버튼
         btn_layout = QHBoxLayout()
@@ -265,17 +313,12 @@ class InfoTab(QWidget):
         btn_layout.addWidget(self.btn_full_auto)
         layout.addLayout(btn_layout)
 
-        # 6. 결과 뷰어
-        layout.addWidget(QLabel("📝 생성된 글 미리보기 (여기서 수정 후 발행 가능)"))
-        self.result_tabs = QTabWidget()
-        self.result_tabs.setMinimumHeight(400) 
-        self.view_text = QTextEdit(); self.view_text.setPlaceholderText("Text 버전 결과")
-        self.view_md = QTextEdit(); self.view_md.setReadOnly(True); self.view_md.setPlaceholderText("Markdown 버전 결과")
-        self.view_html = QTextEdit(); self.view_html.setReadOnly(True); self.view_html.setPlaceholderText("HTML 버전 결과")
-        self.result_tabs.addTab(self.view_text, "Text (수정 가능)")
-        self.result_tabs.addTab(self.view_md, "Markdown")
-        self.result_tabs.addTab(self.view_html, "HTML")
-        layout.addWidget(self.result_tabs)
+        # 6. 결과 뷰어 (단순화 - 텍스트만)
+        layout.addWidget(QLabel("📝 생성된 글 미리보기 (수정 후 발행 가능)"))
+        self.view_result = QTextEdit()
+        self.view_result.setMinimumHeight(350)
+        self.view_result.setPlaceholderText("생성된 글이 여기에 표시됩니다. 직접 수정도 가능합니다.")
+        layout.addWidget(self.view_result)
 
         # 하단 발행 버튼
         self.btn_publish_now = QPushButton("📤 현재 내용으로 발행하기")
@@ -292,15 +335,11 @@ class InfoTab(QWidget):
         """주제 입력 모드 토글 (카테고리/직접입력 상호배타)"""
         use_category = self.radio_use_category.isChecked()
         
-        # 카테고리 관련 컨트롤 활성화/비활성화
         self.combo_cat.setEnabled(use_category)
         self.btn_recommend.setEnabled(use_category)
         self.topic_area.setEnabled(use_category)
-        
-        # 직접 입력 활성화/비활성화
         self.manual_topic.setEnabled(not use_category)
         
-        # 시각적 피드백
         if use_category:
             self.category_frame.setStyleSheet("")
             self.manual_frame.setStyleSheet("color: #999;")
@@ -310,11 +349,9 @@ class InfoTab(QWidget):
 
     def get_selected_topic(self):
         """선택된 주제 반환"""
-        # 직접 입력 모드인 경우
         if self.radio_use_manual.isChecked():
             return self.manual_topic.text().strip()
         
-        # 카테고리 추천 모드인 경우
         selected_btn = self.topic_group.checkedButton()
         if selected_btn:
             return selected_btn.text()
@@ -325,18 +362,15 @@ class InfoTab(QWidget):
         category = self.combo_cat.currentText()
         self.log_signal.emit(f"🤖 '{category}' 관련 주제를 생각 중입니다...")
         
-        # 버튼 상태 변경 - 생성 중 표시
         self.btn_recommend.setEnabled(False)
         self.btn_recommend.setText("⏳ 주제 생성 중...")
         self.btn_recommend.setStyleSheet("background-color: #888; color: white; padding: 8px;")
         
-        # 기존 추천 주제 삭제
         for i in reversed(range(self.topic_layout_inner.count())): 
             widget = self.topic_layout_inner.itemAt(i).widget()
             if widget:
                 widget.setParent(None)
         
-        # 워커 스레드로 API 호출
         self.recommend_worker = RecommendWorker(category)
         self.recommend_worker.finished.connect(self.on_recommend_finished)
         self.recommend_worker.error.connect(self.on_recommend_error)
@@ -344,12 +378,10 @@ class InfoTab(QWidget):
 
     def on_recommend_finished(self, topics: list):
         """추천 완료 처리"""
-        # 버튼 상태 복원 - 생성 완료 표시
         self.btn_recommend.setEnabled(True)
         self.btn_recommend.setText("✅ 주제 생성 완료! (다시 받기)")
         self.btn_recommend.setStyleSheet("background-color: #27AE60; color: white; padding: 8px;")
         
-        # 추천 주제 라디오 버튼으로 표시
         for t in topics:
             rb = QRadioButton(t)
             rb.setStyleSheet("font-size: 13px; padding: 5px;")
@@ -386,7 +418,6 @@ class InfoTab(QWidget):
         self.btn_analyze.setEnabled(True)
         self.btn_analyze.setText("🔍 주제 분석하기 (타겟/질문 추출)")
         
-        # 기존 타깃 라디오버튼 삭제
         for i in reversed(range(self.target_layout.count())):
             widget = self.target_layout.itemAt(i).widget()
             if widget:
@@ -398,25 +429,21 @@ class InfoTab(QWidget):
         questions = data.get("questions", [])
         key_points = data.get("key_points", [])
         
-        # 타깃 독자 라디오버튼 추가 (왼쪽 배치)
         for t in targets:
-            rb = QRadioButton(f"  {t}")  # 왼쪽 여백
+            rb = QRadioButton(f"  {t}")
             rb.setStyleSheet("font-size: 13px; padding: 3px 5px;")
             self.target_layout.addWidget(rb)
             self.target_group.addButton(rb)
             
-        # 첫 번째 타깃 기본 선택
         if self.target_group.buttons():
             self.target_group.buttons()[0].setChecked(True)
             
-        # 예상 질문 체크박스 리스트
         for q in questions:
             item = QListWidgetItem(q)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked)
             self.list_questions.addItem(item)
             
-        # 핵심 정보 요약
         summary_text = "\n".join([f"• {p}" for p in key_points])
         self.txt_summary.setText(summary_text)
         
@@ -428,12 +455,103 @@ class InfoTab(QWidget):
         self.btn_analyze.setText("🔍 주제 분석하기 (타겟/질문 추출)")
         self.log_signal.emit(f"❌ {error_msg}")
 
+    def generate_images(self):
+        """AI 이미지 생성"""
+        topic = self.get_selected_topic()
+        if not topic:
+            QMessageBox.warning(self, "경고", "먼저 주제를 선택하거나 입력해주세요.")
+            return
+        
+        if not self.auth_token:
+            QMessageBox.warning(self, "인증 필요", "이미지 생성은 로그인이 필요합니다.")
+            return
+        
+        count = self.spin_image_count.value()
+        
+        self.btn_gen_images.setEnabled(False)
+        self.btn_gen_images.setText(f"⏳ 생성 중... (0/{count})")
+        
+        # 기존 이미지 클리어
+        self.clear_image_previews()
+        
+        self.image_worker = ImageGenerateWorker(topic, count, self.auth_token)
+        self.image_worker.progress.connect(self.on_image_progress)
+        self.image_worker.finished.connect(self.on_images_finished)
+        self.image_worker.error.connect(self.on_image_error)
+        self.image_worker.start()
+        
+        self.log_signal.emit(f"🖼️ '{topic}' 관련 이미지 {count}장 생성 중...")
+
+    def on_image_progress(self, current: int, total: int):
+        """이미지 생성 진행률"""
+        self.btn_gen_images.setText(f"⏳ 생성 중... ({current}/{total})")
+
+    def on_images_finished(self, images: list):
+        """이미지 생성 완료"""
+        self.btn_gen_images.setEnabled(True)
+        self.btn_gen_images.setText("🖼️ 이미지 생성")
+        
+        self.generated_images = images
+        
+        # 이미지 미리보기 및 체크박스 표시
+        for i, img_base64 in enumerate(images):
+            # 미리보기 라벨
+            preview = QLabel()
+            preview.setFixedSize(150, 100)
+            preview.setStyleSheet("border: 1px solid #ddd;")
+            
+            try:
+                img_data = base64.b64decode(img_base64)
+                qimg = QImage.fromData(img_data)
+                pixmap = QPixmap.fromImage(qimg)
+                scaled = pixmap.scaled(150, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                preview.setPixmap(scaled)
+            except:
+                preview.setText("로드 실패")
+            
+            self.image_preview_layout.addWidget(preview)
+            
+            # 체크박스
+            chk = QCheckBox(f"이미지 {i+1} 삽입")
+            chk.setChecked(True)
+            self.image_checkboxes.append(chk)
+            self.image_checkbox_layout.addWidget(chk)
+        
+        self.log_signal.emit(f"✅ {len(images)}개의 이미지가 생성되었습니다. 삽입할 이미지를 선택하세요.")
+
+    def on_image_error(self, error_msg: str):
+        """이미지 생성 에러"""
+        self.btn_gen_images.setEnabled(True)
+        self.btn_gen_images.setText("🖼️ 이미지 생성")
+        self.log_signal.emit(f"❌ {error_msg}")
+
+    def clear_image_previews(self):
+        """이미지 미리보기 클리어"""
+        while self.image_preview_layout.count():
+            item = self.image_preview_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        while self.image_checkbox_layout.count():
+            item = self.image_checkbox_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        self.image_checkboxes = []
+        self.generated_images = []
+
+    def get_selected_images(self) -> list:
+        """선택된 이미지 base64 리스트 반환"""
+        selected = []
+        for i, chk in enumerate(self.image_checkboxes):
+            if chk.isChecked() and i < len(self.generated_images):
+                selected.append(self.generated_images[i])
+        return selected
+
     def request_start(self, action="full"):
         """작업 시작 요청"""
         if action == "publish_only":
-            current_idx = self.result_tabs.currentIndex()
-            current_widget = self.result_tabs.widget(current_idx)
-            current_content = current_widget.toPlainText()
+            current_content = self.view_result.toPlainText()
             if not current_content:
                 QMessageBox.warning(self, "경고", "발행할 내용이 없습니다.")
                 return
@@ -452,7 +570,6 @@ class InfoTab(QWidget):
             QMessageBox.warning(self, "경고", "주제가 없습니다.")
             return
 
-        # 타깃 독자 선택 (라디오버튼에서)
         targets = []
         selected_target = self.target_group.checkedButton()
         if selected_target:
@@ -462,165 +579,27 @@ class InfoTab(QWidget):
                      for i in range(self.list_questions.count()) 
                      if self.list_questions.item(i).checkState() == Qt.Checked]
 
-        style_options = {
-            "text_subhead": self.txt_subhead.currentText(),
-            "text_emphasis": self.txt_emphasis.currentText(),
-            "text_divider": self.txt_divider.currentText(),
-            "text_body": self.txt_body_style.currentText(),
-            "md_heading": self.md_heading.currentText(),
-            "md_qa": self.md_qa.currentText(),
-            "md_body": self.md_body_style.currentText(),
-            "html_title": self.html_title_style.currentText(),
-            "html_qa": self.html_qa_style.currentText(),
-            "html_color": self.html_color.currentText(),
-            "html_font": self.html_font_size.currentText(),
-            "html_box": self.html_highlight.currentText()
-        }
+        # 선택된 이미지 포함
+        selected_images = self.get_selected_images() if self.group_image.isChecked() else []
 
         data = {
             "action": action, "mode": "info", "topic": topic,
             "tone": self.combo_tone.currentText(), "length": self.combo_len.currentText(),
             "emoji_level": self.combo_emoji.currentText(), "targets": targets,
             "questions": questions, "summary": self.txt_summary.toPlainText(),
-            "insight": self.txt_insight.toPlainText(), "style_options": style_options
+            "insight": self.txt_insight.toPlainText(),
+            "images": selected_images  # base64 이미지 리스트
         }
         self.start_signal.emit(data)
 
     def update_result_view(self, result_data):
-        """결과 뷰어 업데이트 - 개선된 포맷팅"""
+        """결과 뷰어 업데이트"""
         title = result_data.get("title", "제목 없음")
-        
-        # API 응답 구조에 맞게 처리 (content 또는 content_text 둘 다 지원)
         content = result_data.get("content", "") or result_data.get("content_text", "")
         
-        # Text 버전 - 가독성 개선
-        text_content = self._format_text_content(title, content)
-        self.view_text.setText(text_content)
-        
-        # Markdown 버전 - 구조화된 포맷
-        md_content = self._format_markdown_content(title, content)
-        self.view_md.setText(md_content)
-        
-        # HTML 버전 - 스타일링 적용
-        html_content = self._format_html_content(title, content)
-        self.view_html.setText(html_content)
+        # 단순 텍스트로 표시
+        result_text = f"제목: {title}\n\n{'=' * 50}\n\n{content}"
+        self.view_result.setText(result_text)
         
         self.btn_publish_now.setEnabled(True)
-        self.log_signal.emit("✨ 글 생성 완료! 탭을 눌러 확인하세요.")
-
-    def _format_text_content(self, title: str, content: str) -> str:
-        """텍스트 포맷팅 - 가독성 개선"""
-        lines = []
-        lines.append(f"제목: {title}")
-        lines.append("")
-        lines.append("=" * 50)
-        lines.append("")
-        
-        # 본문 처리 - 문단 구분 강화
-        paragraphs = content.split('\n\n')
-        for para in paragraphs:
-            if para.strip():
-                # 소제목 스타일 적용
-                if para.startswith('##') or para.startswith('▶'):
-                    lines.append("")
-                    lines.append(para.strip())
-                    lines.append("-" * 30)
-                else:
-                    lines.append(para.strip())
-                lines.append("")
-        
-        return '\n'.join(lines)
-
-    def _format_markdown_content(self, title: str, content: str) -> str:
-        """마크다운 포맷팅 - 구조화"""
-        lines = []
-        lines.append(f"# {title}")
-        lines.append("")
-        lines.append("---")
-        lines.append("")
-        
-        # 본문에서 섹션 구분 강화
-        paragraphs = content.split('\n')
-        for para in paragraphs:
-            para = para.strip()
-            if not para:
-                lines.append("")
-                continue
-                
-            # 이미 마크다운 헤딩이면 그대로
-            if para.startswith('#'):
-                lines.append(para)
-            # 소제목 패턴 감지 (▶, [, 숫자.)
-            elif para.startswith('▶') or para.startswith('[') or (len(para) > 2 and para[0].isdigit() and para[1] == '.'):
-                lines.append(f"\n## {para}")
-            # 중요 키워드 강조
-            elif '**' in para or '핵심' in para or '중요' in para or '포인트' in para:
-                lines.append(f"**{para}**")
-            else:
-                lines.append(para)
-            
-        return '\n'.join(lines)
-
-    def _format_html_content(self, title: str, content: str) -> str:
-        """HTML 포맷팅 - 스타일링 적용"""
-        # 색상 테마 선택
-        color_map = {
-            "네이버 그린": "#03C75A",
-            "모던 블랙": "#333333",
-            "트러스트 블루": "#4A90E2",
-            "웜 오렌지": "#E67E22"
-        }
-        theme_color = color_map.get(self.html_color.currentText(), "#03C75A")
-        
-        # 폰트 크기
-        font_map = {
-            "기본 (16px)": "16px",
-            "조금 크게 (18px)": "18px",
-            "시원하게 (20px)": "20px"
-        }
-        font_size = font_map.get(self.html_font_size.currentText(), "16px")
-        
-        # 제목 스타일
-        title_style_map = {
-            "기본 (심플)": f"font-size: 24px; font-weight: bold; color: {theme_color};",
-            "밑줄 (Border Bottom)": f"font-size: 24px; font-weight: bold; color: {theme_color}; border-bottom: 3px solid {theme_color}; padding-bottom: 10px;",
-            "배경색 (Box)": f"font-size: 24px; font-weight: bold; color: white; background-color: {theme_color}; padding: 15px; border-radius: 8px;"
-        }
-        title_style = title_style_map.get(self.html_title_style.currentText(), title_style_map["기본 (심플)"])
-        
-        # HTML 생성
-        html_parts = []
-        html_parts.append(f'''<div style="font-family: 'Noto Sans KR', sans-serif; line-height: 1.8; font-size: {font_size};">''')
-        html_parts.append(f'<h1 style="{title_style}">{title}</h1>')
-        html_parts.append('<hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">')
-        
-        # 본문 처리
-        paragraphs = content.split('\n')
-        for para in paragraphs:
-            para = para.strip()
-            if not para:
-                html_parts.append('<br>')
-                continue
-            
-            # 소제목 감지 및 스타일링
-            if para.startswith('##'):
-                para = para.replace('##', '').strip()
-                html_parts.append(f'<h2 style="font-size: 20px; color: {theme_color}; margin-top: 25px; border-left: 4px solid {theme_color}; padding-left: 12px;">{para}</h2>')
-            elif para.startswith('▶') or para.startswith('['):
-                html_parts.append(f'<h3 style="font-size: 18px; color: {theme_color}; margin-top: 20px;">{para}</h3>')
-            # 중요 포인트 강조
-            elif '**' in para:
-                para = re.sub(r'\*\*(.+?)\*\*', r'<strong style="color: ' + theme_color + r';">\1</strong>', para)
-                html_parts.append(f'<p style="margin: 10px 0;">{para}</p>')
-            # 리스트 아이템
-            elif para.startswith('-') or para.startswith('•'):
-                html_parts.append(f'<li style="margin: 5px 0 5px 20px;">{para[1:].strip()}</li>')
-            # 해시태그
-            elif para.startswith('#') and not para.startswith('##'):
-                html_parts.append(f'<p style="color: #1DA1F2; margin-top: 20px;">{para}</p>')
-            else:
-                html_parts.append(f'<p style="margin: 12px 0; text-align: justify;">{para}</p>')
-        
-        html_parts.append('</div>')
-        
-        return '\n'.join(html_parts)
+        self.log_signal.emit("✨ 글 생성 완료! 내용을 확인하고 필요시 수정 후 발행하세요.")

@@ -222,20 +222,9 @@ class DeliveryTab(QWidget):
         group_vehicle = QGroupBox("3. 차량 정보")
         vehicle_form = QFormLayout()
         
-        # 브랜드
-        self.combo_brand = QComboBox()
-        self.combo_brand.setEditable(True)
-        self.combo_brand.addItems([
-            "현대", "기아", "제네시스", "쉐보레", "르노코리아", "쌍용",
-            "벤츠", "BMW", "아우디", "폭스바겐", "볼보", "렉서스", 
-            "도요타", "혼다", "테슬라", "포르쉐", "랜드로버", "재규어",
-            "미니", "페라리", "람보르기니", "기타"
-        ])
-        vehicle_form.addRow("브랜드:", self.combo_brand)
-        
-        # 모델
+        # 모델 (브랜드 제거 - 벤츠 영업사원 전용)
         self.input_model = QLineEdit()
-        self.input_model.setPlaceholderText("예: E클래스, 아반떼, 그랜저 등")
+        self.input_model.setPlaceholderText("예: E클래스, S클래스, GLE, AMG GT 등")
         vehicle_form.addRow("모델:", self.input_model)
         
         # 연식
@@ -362,7 +351,7 @@ class DeliveryTab(QWidget):
                 'region': self.input_region.text().strip()
             },
             'vehicle_info': {
-                'brand': self.combo_brand.currentText(),
+                'brand': '메르세데스-벤츠',  # 고정값
                 'model': self.input_model.text().strip(),
                 'year': self.input_year.text().strip(),
                 'color': self.input_color.text().strip(),
