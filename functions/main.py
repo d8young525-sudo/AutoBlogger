@@ -494,6 +494,16 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                     mimetype="application/json"
                 )
             
+            # 다양한 이미지 스타일 목록
+            styles = [
+                "realistic photo style",
+                "minimalist flat illustration",
+                "isometric 3D style",
+                "watercolor painting style",
+                "infographic diagram style"
+            ]
+            style_list = ", ".join(styles[:count])
+            
             prompt = f"""
             다음 블로그 글의 본문을 분석하여 삽화 이미지 {count}개를 위한 프롬프트를 생성해주세요.
             
@@ -501,13 +511,15 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
             {content[:3000]}
             
             요구사항:
-            - 각 삽화는 본문의 서로 다른 부분을 시각화
-            - 이미지에 텍스트나 글자가 들어가지 않도록
-            - 깔끔하고 심플한 일러스트 스타일
-            - 블로그 글의 이해를 돕는 시각 자료
+            - 각 삽화는 본문의 서로 다른 섹션/주제를 시각화
+            - 이미지에 텍스트나 글자가 절대 들어가지 않도록 명시
+            - 각 이미지는 서로 다른 스타일로 생성 (예: {style_list})
+            - 블로그 글의 이해를 돕는 구체적인 시각 자료
+            - 프롬프트는 영어로 작성, 구체적이고 상세하게 (50단어 이상)
+            - 각 프롬프트 끝에 "NO TEXT, NO LETTERS, NO WORDS" 필수 포함
             
             반드시 아래 JSON 형식으로만 응답하세요:
-            {{"prompts": ["삽화1 영어 설명", "삽화2 영어 설명"], "positions": ["중간", "후반"]}}
+            {{"prompts": ["삽화1 영어 상세 설명 (스타일 포함)", "삽화2 영어 상세 설명 (다른 스타일)"], "positions": ["서론 후", "중반", "결론 전"]}}
             """
             
             resp = client.models.generate_content(
@@ -550,16 +562,32 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
             topic = req_json.get("topic", "")
             tone = req_json.get("tone", "친근한 이웃 (해요체)")
             length = req_json.get("length", "보통 (1,500자)")
-            emoji_level = req_json.get("emoji_level", "조금 사용 (강조용)")
+            emoji_level = req_json.get("emoji_level", "사용 안 함")
             targets = req_json.get("targets", [])
             questions = req_json.get("questions", [])
             summary = req_json.get("summary", "")
             insight = req_json.get("insight", "")
             
+            # 인사말/마무리말 (prompt에서 추출)
+            prompt_text = req_json.get("prompt", "")
+            intro = ""
+            outro = ""
+            if "인사말:" in prompt_text:
+                try:
+                    intro_part = prompt_text.split("인사말:")[1]
+                    intro = intro_part.split("맺음말:")[0].strip() if "맺음말:" in intro_part else intro_part.strip()
+                except:
+                    pass
+            if "맺음말:" in prompt_text:
+                try:
+                    outro = prompt_text.split("맺음말:")[1].strip()
+                except:
+                    pass
+            
             # 출력 스타일 설정
             output_style = req_json.get("output_style", {})
             if isinstance(output_style, list):
-                output_style = {}  # 잘못된 형식 처리
+                output_style = {}
             
             text_style = output_style.get("text", {}) if isinstance(output_style, dict) else {}
             md_style = output_style.get("markdown", {}) if isinstance(output_style, dict) else {}
@@ -585,6 +613,14 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
             elif "2,500" in length or "2500" in length:
                 char_count = "2500"
             
+            # 이모지 사용 여부
+            use_emoji = "조금" in emoji_level or "많이" in emoji_level
+            emoji_instruction = "이모지 적절히 사용" if use_emoji else "이모지 사용하지 마세요. 텍스트만 사용하세요."
+            
+            # 인사말/마무리말 프롬프트 구성
+            intro_instruction = f"[인사말] 다음 인사말로 글을 시작하세요: \"{intro}\"" if intro else ""
+            outro_instruction = f"[마무리말] 다음 맺음말로 글을 마무리하세요: \"{outro}\"" if outro else ""
+            
             full_prompt = f"""
             [ROLE] 네이버 자동차 파워 블로거
             당신은 자동차에 대해 깊은 지식을 가진 전문 블로거입니다.
@@ -595,8 +631,10 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
             [STYLE]
             - 말투: {tone}
             - 분량: {char_count}자 이상
-            - 이모지: {emoji_level}
+            - {emoji_instruction}
             - 타깃 독자: {target_str}
+            
+            {intro_instruction}
             
             [QUESTIONS TO ANSWER]
             {chr(10).join([f"- {q}" for q in questions]) if questions else "없음"}
@@ -607,10 +645,13 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
             [PERSONAL INSIGHT]
             {insight if insight else "없음"}
             
+            {outro_instruction}
+            
             [OUTPUT STYLE PREFERENCES]
             TEXT 형식: 소제목={text_style.get('heading', '【 】 대괄호')}, 강조={text_style.get('emphasis', '** 별표 **')}
             Markdown 형식: 헤딩={md_style.get('heading', '## H2 사용')}, Q&A={md_style.get('qa', '> 인용문 스타일')}
             HTML 형식: 제목={html_style.get('title', '<h2> 태그')}, 색상={html_style.get('color', '네이버 그린 (#03C75A)')}
+            - HTML에서는 이모지를 절대 사용하지 마세요!
             
             [OUTPUT FORMAT - STRICT JSON]
             반드시 아래 형식의 JSON을 출력하세요:

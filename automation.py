@@ -186,6 +186,10 @@ class NaverBlogBot:
             if "device" in current_url.lower():
                 return False, "Device verification required - please login manually"
             
+            # 로그인 후 메인 페이지로 이동하여 세션 안정화
+            self.driver.get("https://www.naver.com")
+            time.sleep(2)
+            
             self._is_logged_in = True
             logger.info("Login successful")
             return True, "Login success"
@@ -203,8 +207,39 @@ class NaverBlogBot:
             
         try:
             logger.info("Navigating to editor...")
-            self.driver.get("https://blog.naver.com/PostWriteForm.naver?wtype=post")
+            
+            # 먼저 블로그 메인으로 이동하여 세션 확인
+            self.driver.get("https://blog.naver.com")
+            time.sleep(2)
+            
+            # 내 블로그 확인을 위해 블로그 홈 방문
+            self.driver.get("https://blog.naver.com/MyBlog.naver")
+            time.sleep(2)
+            
+            # 글쓰기 페이지로 이동
+            self.driver.get("https://blog.naver.com/PostWriteForm.naver")
             time.sleep(3)
+            
+            # 접근 거부 페이지 체크
+            page_source = self.driver.page_source.lower()
+            if "정상적인 접근이 아닙니다" in self.driver.page_source or "비정상적인 접근" in self.driver.page_source:
+                logger.warning("Access denied detected, trying alternative method...")
+                
+                # 대안: 블로그 홈에서 글쓰기 버튼 클릭
+                self.driver.get("https://blog.naver.com/MyBlog.naver")
+                time.sleep(2)
+                
+                try:
+                    # 글쓰기 버튼 찾기
+                    write_btn = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "a.btn_write, a[href*='PostWriteForm'], .write_btn"))
+                    )
+                    write_btn.click()
+                    time.sleep(3)
+                except:
+                    # 직접 URL로 다시 시도
+                    self.driver.get("https://blog.naver.com/PostWriteForm.naver?wtype=post&directAccess=true")
+                    time.sleep(3)
             
             # Close draft popup if present
             try:
@@ -226,8 +261,18 @@ class NaverBlogBot:
             except TimeoutException:
                 pass
             
-            logger.info("Editor loaded successfully")
-            return True, "Editor loaded"
+            # 에디터가 로드되었는지 확인
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".se-component, .se-editor, [class*='editor']"))
+                )
+                logger.info("Editor loaded successfully")
+                return True, "Editor loaded"
+            except:
+                # 최종 확인
+                if "PostWriteForm" in self.driver.current_url or "편집" in self.driver.page_source:
+                    return True, "Editor loaded"
+                return False, "Editor elements not found"
             
         except TimeoutException:
             return False, "Editor load timeout"

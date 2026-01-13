@@ -162,6 +162,8 @@ class InfoTab(QWidget):
         self.illustration_prompts = []
         self.auth_token = ""
         self.generated_content = ""  # 생성된 본문 저장
+        self.generated_title = ""  # 생성된 제목 저장
+        self._pending_illust_count = 0
         self.init_ui()
 
     def set_auth_token(self, token: str):
@@ -759,6 +761,9 @@ class InfoTab(QWidget):
             self.illust_preview_layout.addWidget(container, row, col)
         
         self.log_signal.emit(f"✅ {len(images)}개의 삽화 이미지가 생성되었습니다.")
+        
+        # 이미지 HTML 코드 업데이트
+        self._update_content_with_images()
 
     def on_image_error(self, error_msg: str):
         """이미지 생성 에러"""
@@ -875,6 +880,75 @@ class InfoTab(QWidget):
         }
         self.start_signal.emit(data)
 
+    def generate_image_html(self, img_base64: str, alt_text: str = "이미지", is_thumbnail: bool = False) -> str:
+        """이미지 base64를 HTML 태그로 변환"""
+        if is_thumbnail:
+            # 썸네일용 HTML (네이버 블로그 배경 이미지 스타일)
+            return f'''<div style="width:100%; max-width:800px; margin:20px auto;">
+<img src="data:image/png;base64,{img_base64}" alt="{alt_text}" style="width:100%; height:auto; border-radius:8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+</div>'''
+        else:
+            # 삽화용 HTML
+            return f'''<div style="text-align:center; margin:30px 0;">
+<img src="data:image/png;base64,{img_base64}" alt="{alt_text}" style="max-width:600px; width:100%; height:auto; border-radius:4px;">
+</div>'''
+
+    def _update_content_with_images(self):
+        """이미지가 삽입된 컨텐츠 업데이트"""
+        if not self.generated_content:
+            return
+        
+        # 현재 HTML 컨텐츠 가져오기
+        current_html = self.view_html.toPlainText()
+        
+        # 썸네일 HTML 생성
+        thumbnail_html = ""
+        if self.chk_use_thumbnail.isChecked() and self.thumbnail_images:
+            thumbnail_html = self.generate_image_html(self.thumbnail_images[0], "대표 이미지", True)
+        
+        # 삽화 HTML 생성
+        illust_htmls = []
+        for i, chk in enumerate(self.illust_checkboxes):
+            if chk.isChecked() and i < len(self.illustration_images):
+                illust_htmls.append(self.generate_image_html(
+                    self.illustration_images[i], 
+                    f"삽화 {i+1}"
+                ))
+        
+        # HTML에 이미지 삽입
+        if thumbnail_html or illust_htmls:
+            # 제목 추출
+            lines = current_html.split('\n')
+            title_line = lines[0] if lines else ""
+            body = '\n'.join(lines[1:]) if len(lines) > 1 else current_html
+            
+            # 썸네일은 제목 바로 다음에
+            if thumbnail_html:
+                body = thumbnail_html + "\n\n" + body
+            
+            # 삽화는 본문 중간에 균등 배치
+            if illust_htmls:
+                paragraphs = body.split('\n\n')
+                total_p = len(paragraphs)
+                
+                if total_p > len(illust_htmls):
+                    # 균등 배치
+                    interval = total_p // (len(illust_htmls) + 1)
+                    for i, img_html in enumerate(illust_htmls):
+                        insert_pos = (i + 1) * interval
+                        if insert_pos < len(paragraphs):
+                            paragraphs.insert(insert_pos + i, img_html)
+                    body = '\n\n'.join(paragraphs)
+                else:
+                    # 문단이 적으면 끝에 추가
+                    body = body + '\n\n' + '\n\n'.join(illust_htmls)
+            
+            # 업데이트된 HTML
+            updated_html = title_line + '\n\n' + body
+            self.view_html.setText(updated_html)
+            
+            self.log_signal.emit("📸 이미지가 HTML에 삽입되었습니다. HTML 탭에서 확인하세요.")
+
     def update_result_view(self, result_data):
         """결과 뷰어 업데이트"""
         title = result_data.get("title", "제목 없음")
@@ -884,6 +958,7 @@ class InfoTab(QWidget):
         
         # 생성된 본문 저장 (이미지 생성용)
         self.generated_content = content
+        self.generated_title = title
         
         # TEXT 형식
         text_result = f"제목: {title}\n\n{'=' * 50}\n\n{content}"
@@ -893,8 +968,9 @@ class InfoTab(QWidget):
         md_result = f"# {title}\n\n{content_md}"
         self.view_markdown.setText(md_result)
         
-        # HTML 형식
-        html_result = f"<h1>{title}</h1>\n\n{content_html}"
+        # HTML 형식 (이모지 제거)
+        clean_html = self._remove_emojis(content_html)
+        html_result = f"<h1>{title}</h1>\n\n{clean_html}"
         self.view_html.setText(html_result)
         
         # 이미지 생성 섹션 활성화
@@ -903,3 +979,17 @@ class InfoTab(QWidget):
         
         self.btn_publish_now.setEnabled(True)
         self.log_signal.emit("✨ 글 생성 완료! 이제 이미지를 생성하거나 바로 발행할 수 있습니다.")
+
+    def _remove_emojis(self, text: str) -> str:
+        """텍스트에서 이모지 제거"""
+        import re
+        # 이모지 패턴 (유니코드 범위)
+        emoji_pattern = re.compile("["
+            u"\U0001F600-\U0001F64F"  # emoticons
+            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+            u"\U0001F680-\U0001F6FF"  # transport & map symbols
+            u"\U0001F1E0-\U0001F1FF"  # flags
+            u"\U00002702-\U000027B0"
+            u"\U000024C2-\U0001F251"
+            "]+", flags=re.UNICODE)
+        return emoji_pattern.sub('', text)
