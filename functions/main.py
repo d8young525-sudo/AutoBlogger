@@ -259,7 +259,8 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
             - 구체적이고 클릭을 유도하는 제목
             - 정보성과 실용성이 있는 주제
             
-            형식: JSON (배열) -> {{"topics": ["주제1", "주제2", ...]}}
+            반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
+            {{"topics": ["주제1", "주제2", "주제3", "주제4", "주제5"]}}
             """
             
             # Grounding with Google Search
@@ -267,15 +268,39 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                 model=MODEL_NAME, 
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
                     tools=[types.Tool(google_search=types.GoogleSearch())]
                 )
             )
-            return https_fn.Response(
-                resp.text.replace("```json", "").replace("```", "").strip(), 
-                status=200, 
-                mimetype="application/json"
-            )
+            
+            # 응답에서 JSON 추출
+            raw_text = resp.text.replace("```json", "").replace("```", "").strip()
+            
+            # JSON 객체만 추출 (첫 번째 { 부터 마지막 } 까지)
+            try:
+                start_idx = raw_text.find('{')
+                end_idx = raw_text.rfind('}') + 1
+                if start_idx != -1 and end_idx > start_idx:
+                    json_str = raw_text[start_idx:end_idx]
+                    parsed = json.loads(json_str)
+                    return https_fn.Response(
+                        json.dumps(parsed), 
+                        status=200, 
+                        mimetype="application/json"
+                    )
+                else:
+                    # JSON 형식이 아니면 기본값 반환
+                    return https_fn.Response(
+                        json.dumps({"topics": ["주제를 다시 생성해주세요"]}), 
+                        status=200, 
+                        mimetype="application/json"
+                    )
+            except json.JSONDecodeError as e:
+                logging.error(f"JSON parse error in recommend: {e}, raw: {raw_text[:500]}")
+                return https_fn.Response(
+                    json.dumps({"topics": ["주제 생성 중 오류가 발생했습니다. 다시 시도해주세요."]}), 
+                    status=200, 
+                    mimetype="application/json"
+                )
 
         # ============================================
         # [모드 2] 주제 분석 (Grounding 적용)
@@ -291,22 +316,45 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
             2. 독자들이 실제로 궁금해하는 질문 (5~7개)
             3. 반드시 포함해야 할 핵심 정보 (5~7개)
             
-            형식: JSON -> {{"targets": [...], "questions": [...], "key_points": [...]}}
+            반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
+            {{"targets": ["타깃1", "타깃2", ...], "questions": ["질문1", "질문2", ...], "key_points": ["포인트1", "포인트2", ...]}}
             """
             
             resp = client.models.generate_content(
                 model=MODEL_NAME, 
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
                     tools=[types.Tool(google_search=types.GoogleSearch())]
                 )
             )
-            return https_fn.Response(
-                resp.text.replace("```json", "").replace("```", "").strip(), 
-                status=200, 
-                mimetype="application/json"
-            )
+            
+            # 응답에서 JSON 추출
+            raw_text = resp.text.replace("```json", "").replace("```", "").strip()
+            
+            try:
+                start_idx = raw_text.find('{')
+                end_idx = raw_text.rfind('}') + 1
+                if start_idx != -1 and end_idx > start_idx:
+                    json_str = raw_text[start_idx:end_idx]
+                    parsed = json.loads(json_str)
+                    return https_fn.Response(
+                        json.dumps(parsed), 
+                        status=200, 
+                        mimetype="application/json"
+                    )
+                else:
+                    return https_fn.Response(
+                        json.dumps({"targets": [], "questions": [], "key_points": []}), 
+                        status=200, 
+                        mimetype="application/json"
+                    )
+            except json.JSONDecodeError as e:
+                logging.error(f"JSON parse error in analyze: {e}, raw: {raw_text[:500]}")
+                return https_fn.Response(
+                    json.dumps({"targets": [], "questions": [], "key_points": []}), 
+                    status=200, 
+                    mimetype="application/json"
+                )
 
         # ============================================
         # [모드 3] 이미지 생성 (인증 필요)
@@ -458,7 +506,8 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
             - 깔끔하고 심플한 일러스트 스타일
             - 블로그 글의 이해를 돕는 시각 자료
             
-            형식: JSON -> {{"prompts": ["삽화1 설명", "삽화2 설명", ...], "positions": ["중간", "후반", ...]}}
+            반드시 아래 JSON 형식으로만 응답하세요:
+            {{"prompts": ["삽화1 영어 설명", "삽화2 영어 설명"], "positions": ["중간", "후반"]}}
             """
             
             resp = client.models.generate_content(
@@ -467,11 +516,32 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
             
-            return https_fn.Response(
-                resp.text.replace("```json", "").replace("```", "").strip(), 
-                status=200, 
-                mimetype="application/json"
-            )
+            raw_text = resp.text.replace("```json", "").replace("```", "").strip()
+            
+            try:
+                start_idx = raw_text.find('{')
+                end_idx = raw_text.rfind('}') + 1
+                if start_idx != -1 and end_idx > start_idx:
+                    json_str = raw_text[start_idx:end_idx]
+                    parsed = json.loads(json_str)
+                    return https_fn.Response(
+                        json.dumps(parsed), 
+                        status=200, 
+                        mimetype="application/json"
+                    )
+                else:
+                    return https_fn.Response(
+                        json.dumps({"prompts": [], "positions": []}), 
+                        status=200, 
+                        mimetype="application/json"
+                    )
+            except json.JSONDecodeError as e:
+                logging.error(f"JSON parse error in illustration prompts: {e}")
+                return https_fn.Response(
+                    json.dumps({"prompts": [], "positions": []}), 
+                    status=200, 
+                    mimetype="application/json"
+                )
 
         # ============================================
         # [모드 6] 글 작성 (Grounding 적용 - 최신 정보 반영)
@@ -564,15 +634,21 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                 model=MODEL_NAME, 
                 contents=full_prompt,
                 config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
                     tools=[types.Tool(google_search=types.GoogleSearch())]
                 )
             )
             
             raw_text = resp.text.replace("```json", "").replace("```", "").strip()
             
+            # JSON 객체 추출
             try:
-                data = json.loads(raw_text)
+                start_idx = raw_text.find('{')
+                end_idx = raw_text.rfind('}') + 1
+                if start_idx != -1 and end_idx > start_idx:
+                    json_str = raw_text[start_idx:end_idx]
+                    data = json.loads(json_str)
+                else:
+                    raise json.JSONDecodeError("No JSON found", raw_text, 0)
                 
                 # content 키 호환성 처리
                 if "content" not in data:
@@ -590,9 +666,10 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                     mimetype="application/json"
                 )
                 
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                logging.error(f"JSON parse error in write: {e}, raw: {raw_text[:500]}")
                 return https_fn.Response(json.dumps({
-                    "title": f"{topic} (형식 오류)",
+                    "title": f"{topic}",
                     "content": raw_text,
                     "content_text": raw_text,
                     "content_md": raw_text,
