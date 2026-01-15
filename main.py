@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Auto Blogger Pro - 자동 블로그 포스팅 도구
+v3.5.0: 글쓰기 환경설정 탭 분리
 GUI 및 CLI 모드 지원
 Firebase Auth 로그인 필수
 """
@@ -31,6 +32,7 @@ def run_gui():
         
         from ui.info_tab import InfoTab
         from ui.settings_tab import SettingsTab
+        from ui.writing_settings_tab import WritingSettingsTab
         from ui.delivery_tab import DeliveryTab
         from ui.login_dialog import LoginDialog
         from core.worker import AutomationWorker
@@ -49,7 +51,7 @@ def run_gui():
             self.worker = None
             self.current_user = None
             self.id_token = None
-            self.user_info = None  # 서버에서 받은 사용자 정보
+            self.user_info = None
 
             main_widget = QWidget()
             self.setCentralWidget(main_widget)
@@ -65,7 +67,7 @@ def run_gui():
             self.btn_logout = QPushButton("🚪 로그아웃")
             self.btn_logout.setStyleSheet("background-color: #E74C3C; color: white; padding: 5px 10px;")
             self.btn_logout.clicked.connect(self.do_logout)
-            self.btn_logout.hide()  # 초기에는 숨김
+            self.btn_logout.hide()
             
             user_bar.addWidget(self.lbl_user_email)
             user_bar.addWidget(self.lbl_subscription)
@@ -82,15 +84,20 @@ def run_gui():
             # Tab widget
             self.tabs = QTabWidget()
             
-            # 설정 탭을 먼저 생성 (다른 탭에서 참조하기 위해)
+            # 글쓰기 환경설정 탭 먼저 생성 (다른 탭에서 참조)
+            self.tab_writing_settings = WritingSettingsTab()
+            
+            # 기본 환경설정 탭
             self.tab_settings = SettingsTab()
             
-            # info_tab에 settings_tab 연결 (출력 스타일 설정 가져오기용)
-            self.tab_info = InfoTab(settings_tab=self.tab_settings)
+            # info_tab에 글쓰기 환경설정 탭 연결
+            self.tab_info = InfoTab(writing_settings_tab=self.tab_writing_settings)
             self.tab_delivery = DeliveryTab()
             
+            # 탭 추가 (순서 변경: 글쓰기 환경설정을 환경설정 앞에)
             self.tabs.addTab(self.tab_info, "📝 정보성 글쓰기")
             self.tabs.addTab(self.tab_delivery, "🚗 출고 후기")
+            self.tabs.addTab(self.tab_writing_settings, "✍️ 글쓰기 환경설정")
             self.tabs.addTab(self.tab_settings, "⚙️ 환경 설정")
             
             layout.addWidget(self.tabs)
@@ -118,18 +125,12 @@ def run_gui():
             saved_email = self.settings.value("auth_email", "")
             
             if saved_token and saved_email:
-                # 저장된 토큰으로 서버 검증
                 self.id_token = saved_token
                 self.current_user = {"email": saved_email}
                 
                 if self.verify_and_fetch_user_info():
-                    # 유효한 토큰, 승인된 사용자
                     return
-                else:
-                    # 토큰 만료 또는 미승인 사용자
-                    pass
             
-            # 로그인 필요
             self.show_login_required()
 
         def show_login_required(self):
@@ -147,9 +148,8 @@ def run_gui():
             dialog = LoginDialog(self, api_key=api_key)
             dialog.login_success.connect(self.on_login_success)
             
-            # 취소 시 프로그램 종료
             result = dialog.exec()
-            if result == 0:  # Rejected (취소)
+            if result == 0:
                 sys.exit(0)
 
         def on_login_success(self, user_data: dict):
@@ -157,7 +157,6 @@ def run_gui():
             self.current_user = user_data
             self.id_token = user_data.get("id_token", "")
             
-            # 서버에서 사용자 정보 확인 (승인 여부)
             if not self.verify_and_fetch_user_info():
                 QMessageBox.warning(
                     self,
@@ -192,15 +191,12 @@ def run_gui():
                     is_active = self.user_info.get("is_active", False)
                     
                     if is_active:
-                        # 승인된 사용자 - UI 업데이트
                         self.update_user_display()
                         return True
                     else:
-                        # 미승인 사용자
                         return False
                         
                 elif response.status_code == 401:
-                    # 토큰 만료
                     self.settings.remove("auth_token")
                     return False
                 else:
@@ -217,8 +213,6 @@ def run_gui():
                 self.lbl_user_email.setText(f"✅ {email}")
                 self.lbl_user_email.setStyleSheet("color: #27AE60; font-weight: bold;")
                 
-                # 구독 만료일 (추후 결제 시스템 연동 시 사용)
-                # 현재는 "정식 사용자"로 표시
                 is_admin = self.user_info.get("is_admin", False)
                 if is_admin:
                     self.lbl_subscription.setText("👑 관리자")
@@ -247,8 +241,6 @@ def run_gui():
                 self.user_info = None
                 
                 self.update_log("🚪 로그아웃 되었습니다.")
-                
-                # 로그인 화면으로
                 self.show_login_required()
 
         def start_automation(self, data):
@@ -259,26 +251,53 @@ def run_gui():
             # 발행 기능은 네이버 계정 필요
             if data.get("action") in ["publish_only", "full"]:
                 if not user_id or not user_pw:
-                    self.update_log("❌ 오류: 설정 탭에서 네이버 ID/PW를 먼저 저장해주세요.")
-                    self.tabs.setCurrentIndex(2)
+                    self.update_log("❌ 오류: [환경 설정] 탭에서 네이버 ID/PW를 먼저 저장해주세요.")
+                    self.tabs.setCurrentIndex(3)  # 환경 설정 탭으로 이동
                     return
 
+            # 카테고리 정보 가져오기 (글쓰기 환경설정에서)
+            category = data.get("category", "")
+            if not category:
+                # mode에 따라 카테고리 자동 설정
+                mode = data.get("mode", "")
+                if mode == "info":
+                    category = self.tab_writing_settings.get_info_category()
+                elif mode == "delivery":
+                    category = self.tab_writing_settings.get_delivery_category()
+            
             settings_dict = {
                 "id": user_id, 
                 "pw": user_pw,
                 "intro": self.settings.value("intro", ""),
                 "outro": self.settings.value("outro", ""),
-                "outro_image": self.settings.value("outro_image", ""),  # 명함 이미지
+                "outro_image": self.settings.value("outro_image", ""),
                 "auth_token": self.id_token or "",
-                "default_category": self.tab_settings.get_default_category()  # 기본 카테고리
+                "default_category": category
             }
 
             # Create and start worker
             self.worker = AutomationWorker(data, settings_dict)
             self.worker.log_signal.connect(self.update_log)
-            self.worker.result_signal.connect(self.tab_info.update_result_view)
-            self.worker.error_signal.connect(self.update_log)
+            self.worker.result_signal.connect(self.on_worker_result)
+            self.worker.error_signal.connect(self.on_worker_error)
             self.worker.start()
+
+        def on_worker_result(self, result):
+            """워커 결과 처리"""
+            # 현재 탭에 따라 결과 전달
+            current_tab = self.tabs.currentIndex()
+            if current_tab == 0:  # 정보성 글쓰기
+                self.tab_info.update_result_view(result)
+            elif current_tab == 1:  # 출고 후기
+                self.tab_delivery.update_result_view(result)
+
+        def on_worker_error(self, error_msg):
+            """워커 에러 처리"""
+            self.update_log(f"❌ {error_msg}")
+            # 버튼 상태 복원
+            current_tab = self.tabs.currentIndex()
+            if current_tab == 0:
+                self.tab_info.reset_generate_button()
 
         @Slot(str)
         def update_log(self, msg):
