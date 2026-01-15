@@ -77,7 +77,11 @@ class BlogGenerator:
         """Lazy load Gemini client"""
         if self._gemini_client is None:
             from core.gemini_client import GeminiClient
-            self._gemini_client = GeminiClient(api_key=self._gemini_api_key)
+            self._gemini_client = GeminiClient(
+                api_key=self._gemini_api_key,
+                model=getattr(Config, 'GEMINI_MODEL', 'gemini-2.5-flash'),
+                use_grounding=getattr(Config, 'GEMINI_USE_GROUNDING', True)
+            )
         return self._gemini_client
     
     @property
@@ -151,7 +155,17 @@ class BlogGenerator:
                 output += "\n\n" + "=" * 50 + "\n"
                 output += "태그: " + ", ".join(f"#{tag}" for tag in tags)
             
+            # Add sources if grounded
+            sources = result.get("sources", [])
+            if sources:
+                output += "\n\n" + "=" * 50 + "\n"
+                output += "참고 자료:\n"
+                for i, source in enumerate(sources[:5], 1):  # Max 5 sources
+                    output += f"  {i}. {source.get('title', 'Unknown')}\n"
+            
             logger.info(f"Content generated successfully: {title}")
+            if sources:
+                logger.info(f"Grounded with {len(sources)} sources")
             return output
             
         except Exception as e:
@@ -273,12 +287,17 @@ class BlogGenerator:
             "gemini_available": False,
             "naver_available": False,
             "posts_count": len(self._posts),
-            "last_post_title": None
+            "last_post_title": None,
+            "gemini_model": None,
+            "grounding_enabled": False
         }
         
         # Check Gemini
         try:
             status["gemini_available"] = self.gemini_client.is_available()
+            model_info = self.gemini_client.get_model_info()
+            status["gemini_model"] = model_info.get("model")
+            status["grounding_enabled"] = model_info.get("grounding_enabled", False)
         except Exception:
             pass
         
@@ -293,6 +312,23 @@ class BlogGenerator:
             status["last_post_title"] = self._posts[-1].title
         
         return status
+    
+    def get_trending_topics(self, category: str = "technology", count: int = 5) -> List[Dict[str, str]]:
+        """
+        Get trending blog topics using Gemini with Google Search grounding
+        
+        Args:
+            category: Topic category
+            count: Number of topics
+            
+        Returns:
+            List of trending topics
+        """
+        try:
+            return self.gemini_client.search_trending_topics(category, count)
+        except Exception as e:
+            logger.error(f"Failed to get trending topics: {e}")
+            return []
     
     def __enter__(self):
         """Context manager entry"""

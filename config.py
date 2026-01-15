@@ -43,6 +43,11 @@ class Config:
     
     # API Keys (Loaded from environment variables)
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    
+    # Gemini Model Settings
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_USE_GROUNDING: bool = os.getenv("GEMINI_USE_GROUNDING", "true").lower() == "true"
+    
     FIREBASE_CREDENTIALS_PATH: str = os.getenv(
         "FIREBASE_CREDENTIALS_PATH", 
         str(BASE_DIR / "firebase_key.json")
@@ -111,6 +116,8 @@ class Config:
             "headless_mode": cls.HEADLESS_MODE,
             "debug_mode": cls.DEBUG_MODE,
             "has_gemini_key": bool(cls.GEMINI_API_KEY),
+            "gemini_model": cls.GEMINI_MODEL,
+            "gemini_grounding": cls.GEMINI_USE_GROUNDING,
             "has_naver_credentials": bool(cls.NAVER_ID and cls.NAVER_PW),
         }
     
