@@ -1,11 +1,12 @@
 """
 정보성 글쓰기 탭 - 블로그 포스팅 자동 생성 기능
-v3.3.2: 원고 생성 후 본문 기반 삽화 생성, Gemini Grounding 연동
+v3.3.3: TEXT 우선 생성 구조, 네이버 에디터 HTML 지원
 """
 import requests
 import markdown
 import re
 import base64
+from core.content_converter import ContentConverter
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout, 
                                QComboBox, QLineEdit, QPushButton, QRadioButton, 
                                QButtonGroup, QLabel, QMessageBox, QScrollArea, 
@@ -892,28 +893,30 @@ class InfoTab(QWidget):
             self.log_signal.emit("📸 이미지가 HTML에 삽입되었습니다. HTML 탭에서 확인하세요.")
 
     def update_result_view(self, result_data):
-        """결과 뷰어 업데이트"""
+        """결과 뷰어 업데이트 - TEXT 기반 변환 사용"""
         title = result_data.get("title", "제목 없음")
         content = result_data.get("content", "") or result_data.get("content_text", "")
-        content_md = result_data.get("content_md", content)
-        content_html = result_data.get("content_html", content.replace(chr(10), '<br>'))
         
         # 생성된 본문 저장 (이미지 생성용)
         self.generated_content = content
         self.generated_title = title
         
-        # TEXT 형식
-        text_result = f"제목: {title}\n\n{'=' * 50}\n\n{content}"
-        self.view_text.setText(text_result)
+        # 스타일 설정 가져오기
+        style_settings = self.get_output_style_settings()
+        
+        # ContentConverter를 사용하여 TEXT → Markdown/HTML 변환
+        converter = ContentConverter(style_settings)
+        converted = converter.convert_all(content, title)
+        
+        # TEXT 형식 (스타일 적용)
+        self.view_text.setText(converted["text"])
         
         # MARKDOWN 형식
-        md_result = f"# {title}\n\n{content_md}"
-        self.view_markdown.setText(md_result)
+        self.view_markdown.setText(converted["markdown"])
         
-        # HTML 형식 (이모지 제거)
-        clean_html = self._remove_emojis(content_html)
-        html_result = f"<h1>{title}</h1>\n\n{clean_html}"
-        self.view_html.setText(html_result)
+        # HTML 형식 (네이버 블로그 스타일, 이모지 제거)
+        clean_html = self._remove_emojis(converted["html_naver"])
+        self.view_html.setText(clean_html)
         
         # 이미지 생성 섹션 활성화
         self.group_image.setEnabled(True)
