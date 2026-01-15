@@ -42,6 +42,10 @@ class Config:
     # Gemini API (for image generation)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     
+    # 이미지 생성 모델 설정
+    # 옵션: gemini-2.5-flash-image (권장), imagen-3.0-generate-001, gemini-2.0-flash-preview-image-generation
+    GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
+    
     # Firebase Auth (웹 API 키 - Firebase Console에서 확인)
     # 환경변수가 없으면 기본값 사용
     FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyBAmWCulbDrqONvkA5Zd-Cr_e5GLu3y0Ac")
@@ -75,6 +79,7 @@ class Config:
             "backend_url": cls.BACKEND_URL,
             "gui_available": cls.is_gui_available(),
             "gemini_available": bool(cls.GEMINI_API_KEY),
+            "image_model": cls.GEMINI_IMAGE_MODEL,
         }
 
 
