@@ -1,6 +1,7 @@
 """
-환경 설정 탭 - 네이버 계정, 고정 인사말/맺음말, 명함 이미지, 출력 스타일, 카테고리 설정
-v3.3.0: 출력 스타일 설정 추가, 블로그 카테고리 설정 추가
+환경 설정 탭 - 네이버 계정, 고정 인사말/맺음말, 명함 이미지, 출력 스타일, 
+               이모티콘 그룹, 이미지 생성 설정
+v3.4.0: 이모티콘 그룹 선택, 이미지 생성 옵션 추가
 """
 import os
 from PySide6.QtWidgets import (
@@ -8,7 +9,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QTextEdit, QPushButton, QMessageBox,
     QHBoxLayout, QLabel, QFileDialog, QComboBox,
     QTabWidget, QScrollArea, QListWidget, QListWidgetItem,
-    QAbstractItemView
+    QAbstractItemView, QCheckBox, QRadioButton, QButtonGroup
 )
 from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtGui import QPixmap
@@ -54,7 +55,7 @@ class SettingsTab(QWidget):
         group_account.setLayout(account_form)
         layout.addWidget(group_account)
         
-        # ========== 2. 블로그 카테고리 설정 (NEW) ==========
+        # ========== 2. 블로그 카테고리 설정 ==========
         group_category = QGroupBox("📁 블로그 카테고리 설정")
         category_layout = QVBoxLayout()
         
@@ -169,7 +170,86 @@ class SettingsTab(QWidget):
         group_outro.setLayout(outro_layout)
         layout.addWidget(group_outro)
         
-        # ========== 5. 출력 스타일 설정 (NEW - info_tab에서 이동) ==========
+        # ========== 5. 이모티콘 설정 (NEW) ==========
+        group_emoticon = QGroupBox("😊 이모티콘 설정")
+        emoticon_layout = QVBoxLayout()
+        
+        emoticon_desc = QLabel("생성되는 글에 사용할 이모티콘 그룹을 선택하세요.")
+        emoticon_desc.setStyleSheet("color: #666; font-size: 11px;")
+        emoticon_layout.addWidget(emoticon_desc)
+        
+        # 이모티콘 그룹 체크박스들
+        self.emoticon_checkboxes = {}
+        emoticon_groups = [
+            ("basic", "기본 이모지", "👍 ❤️ ⭐ ✅ 💡"),
+            ("business", "비즈니스", "📈 💰 🤝 📋 🎯"),
+            ("car", "자동차", "🚗 ⛽ 🔑 🛣️ 🚦"),
+            ("food", "음식/맛집", "🍽️ ☕ 🍕 😋 ⭐"),
+            ("travel", "여행", "✈️ 🏨 📷 🗺️ 🧳"),
+            ("expression", "표정/감정", "😊 🤔 😎 🤩 😍"),
+            ("decoration", "꾸미기", "✨ 🎉 🏆 🔥 👑"),
+        ]
+        
+        for group_id, group_name, preview in emoticon_groups:
+            chk = QCheckBox(f"{group_name} ({preview})")
+            chk.setChecked(group_id in ["basic", "decoration"])  # 기본 선택
+            self.emoticon_checkboxes[group_id] = chk
+            emoticon_layout.addWidget(chk)
+        
+        group_emoticon.setLayout(emoticon_layout)
+        layout.addWidget(group_emoticon)
+        
+        # ========== 6. 이미지 생성 설정 (NEW) ==========
+        group_image_gen = QGroupBox("🖼️ 이미지 생성 설정")
+        image_gen_layout = QVBoxLayout()
+        
+        image_gen_desc = QLabel("AI 이미지 생성 관련 기본 설정입니다.")
+        image_gen_desc.setStyleSheet("color: #666; font-size: 11px;")
+        image_gen_layout.addWidget(image_gen_desc)
+        
+        # 썸네일 설정
+        image_gen_layout.addWidget(QLabel("📷 대표 썸네일 이미지:"))
+        
+        self.radio_thumb_ai = QRadioButton("AI 자동 생성")
+        self.radio_thumb_ai.setChecked(True)
+        self.radio_thumb_none = QRadioButton("생성 안 함")
+        
+        self.thumb_group = QButtonGroup()
+        self.thumb_group.addButton(self.radio_thumb_ai)
+        self.thumb_group.addButton(self.radio_thumb_none)
+        
+        thumb_row = QHBoxLayout()
+        thumb_row.addWidget(self.radio_thumb_ai)
+        thumb_row.addWidget(self.radio_thumb_none)
+        thumb_row.addStretch()
+        image_gen_layout.addLayout(thumb_row)
+        
+        # 본문 삽화 설정
+        image_gen_layout.addWidget(QLabel("🎨 본문 삽화 이미지:"))
+        
+        self.radio_illust_ai = QRadioButton("AI 자동 생성")
+        self.radio_illust_none = QRadioButton("생성 안 함 (권장)")
+        self.radio_illust_none.setChecked(True)
+        
+        self.illust_group = QButtonGroup()
+        self.illust_group.addButton(self.radio_illust_ai)
+        self.illust_group.addButton(self.radio_illust_none)
+        
+        illust_row = QHBoxLayout()
+        illust_row.addWidget(self.radio_illust_ai)
+        illust_row.addWidget(self.radio_illust_none)
+        illust_row.addStretch()
+        image_gen_layout.addLayout(illust_row)
+        
+        illust_notice = QLabel("💡 본문 삽화는 주제에 따라 품질 차이가 크므로 필요시만 사용을 권장합니다.")
+        illust_notice.setStyleSheet("color: #888; font-size: 11px;")
+        illust_notice.setWordWrap(True)
+        image_gen_layout.addWidget(illust_notice)
+        
+        group_image_gen.setLayout(image_gen_layout)
+        layout.addWidget(group_image_gen)
+        
+        # ========== 7. 출력 스타일 설정 ==========
         group_output = QGroupBox("🎨 출력 스타일 설정")
         output_layout = QVBoxLayout()
         
@@ -297,6 +377,20 @@ class SettingsTab(QWidget):
         else:
             self.lbl_image_preview.setText("이미지 없음")
         
+        # 이모티콘 그룹 설정
+        selected_emoticons = self.settings.value("emoticon_groups", ["basic", "decoration"])
+        for group_id, chk in self.emoticon_checkboxes.items():
+            chk.setChecked(group_id in selected_emoticons)
+        
+        # 이미지 생성 설정
+        thumb_mode = self.settings.value("thumbnail_mode", "ai")
+        self.radio_thumb_ai.setChecked(thumb_mode == "ai")
+        self.radio_thumb_none.setChecked(thumb_mode != "ai")
+        
+        illust_mode = self.settings.value("illustration_mode", "none")
+        self.radio_illust_ai.setChecked(illust_mode == "ai")
+        self.radio_illust_none.setChecked(illust_mode != "ai")
+        
         # 출력 스타일 설정 로드
         self._load_output_style_settings()
     
@@ -390,6 +484,21 @@ class SettingsTab(QWidget):
             categories.append(self.list_categories.item(i).text())
         return categories
     
+    def get_selected_emoticon_groups(self) -> list:
+        """선택된 이모티콘 그룹 반환"""
+        groups = []
+        for group_id, chk in self.emoticon_checkboxes.items():
+            if chk.isChecked():
+                groups.append(group_id)
+        return groups
+    
+    def get_image_settings(self) -> dict:
+        """이미지 생성 설정 반환"""
+        return {
+            "thumbnail_mode": "ai" if self.radio_thumb_ai.isChecked() else "none",
+            "illustration_mode": "ai" if self.radio_illust_ai.isChecked() else "none",
+        }
+    
     def _add_category(self):
         """카테고리 추가"""
         new_cat = self.input_new_category.text().strip()
@@ -468,6 +577,13 @@ class SettingsTab(QWidget):
         # 카테고리 설정
         self.settings.setValue("default_category", self.input_category.text().strip())
         self.settings.setValue("category_list", self.get_category_list())
+        
+        # 이모티콘 그룹 설정
+        self.settings.setValue("emoticon_groups", self.get_selected_emoticon_groups())
+        
+        # 이미지 생성 설정
+        self.settings.setValue("thumbnail_mode", "ai" if self.radio_thumb_ai.isChecked() else "none")
+        self.settings.setValue("illustration_mode", "ai" if self.radio_illust_ai.isChecked() else "none")
         
         # 출력 스타일 설정
         self._save_output_style_settings()
