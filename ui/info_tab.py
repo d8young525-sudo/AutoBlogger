@@ -150,8 +150,9 @@ class InfoTab(QWidget):
     start_signal = Signal(dict) 
     log_signal = Signal(str)
 
-    def __init__(self):
+    def __init__(self, settings_tab=None):
         super().__init__()
+        self.settings_tab = settings_tab  # 환경설정 탭 참조 (출력 스타일 가져오기용)
         self.recommend_worker = None
         self.analysis_worker = None
         self.thumbnail_worker = None
@@ -262,6 +263,11 @@ class InfoTab(QWidget):
         group_opt.setLayout(form_opt)
         layout.addWidget(group_opt)
 
+        # 출력 스타일 안내 (환경설정에서 관리)
+        style_notice = QLabel("💡 출력 스타일 (Text/Markdown/HTML)은 [환경 설정] 탭에서 관리됩니다.")
+        style_notice.setStyleSheet("color: #666; font-size: 11px; padding: 5px; background-color: #f8f8f8; border-radius: 4px;")
+        layout.addWidget(style_notice)
+
         # 3. 세부 설정 (접을 수 있음)
         self.group_adv = QGroupBox("3. 세부 설정 (선택)")
         self.group_adv.setCheckable(True)
@@ -305,87 +311,7 @@ class InfoTab(QWidget):
         self.group_adv.setLayout(adv_layout)
         layout.addWidget(self.group_adv)
 
-        # 4. 출력 스타일 설정
-        group_output = QGroupBox("4. 출력 스타일 설정")
-        output_layout = QVBoxLayout()
-        
-        self.output_tabs = QTabWidget()
-        
-        # TEXT 설정 탭
-        text_widget = QWidget()
-        text_layout = QFormLayout(text_widget)
-        
-        self.combo_text_heading = QComboBox()
-        self.combo_text_heading.addItems(["【 】 대괄호", "▶ 화살표", "● 원형", "■ 사각형", "※ 꽃표"])
-        text_layout.addRow("소제목 스타일:", self.combo_text_heading)
-        
-        self.combo_text_emphasis = QComboBox()
-        self.combo_text_emphasis.addItems(["** 별표 **", "「 」 꺽쇠", "★ ~ ★", "밑줄 ___"])
-        text_layout.addRow("강조 표현:", self.combo_text_emphasis)
-        
-        self.combo_text_divider = QComboBox()
-        self.combo_text_divider.addItems(["━━━━━━ (실선)", "- - - - - (점선)", "═══════ (이중선)", "빈 줄만"])
-        text_layout.addRow("구분선:", self.combo_text_divider)
-        
-        self.combo_text_spacing = QComboBox()
-        self.combo_text_spacing.addItems(["기본 (1줄)", "넓게 (2줄)", "좁게 (줄바꿈만)"])
-        text_layout.addRow("문단 간격:", self.combo_text_spacing)
-        
-        self.output_tabs.addTab(text_widget, "📄 Text 설정")
-        
-        # MARKDOWN 설정 탭
-        md_widget = QWidget()
-        md_layout = QFormLayout(md_widget)
-        
-        self.combo_md_heading = QComboBox()
-        self.combo_md_heading.addItems(["## H2 사용", "### H3 사용", "**굵게** 사용"])
-        md_layout.addRow("헤딩 레벨:", self.combo_md_heading)
-        
-        self.combo_md_list = QComboBox()
-        self.combo_md_list.addItems(["- 하이픈", "* 별표", "1. 숫자"])
-        md_layout.addRow("목록 기호:", self.combo_md_list)
-        
-        self.combo_md_qa = QComboBox()
-        self.combo_md_qa.addItems(["> 인용문 스타일", "**Q:** 굵게 스타일", "### Q: 헤딩 스타일"])
-        md_layout.addRow("Q&A 표현:", self.combo_md_qa)
-        
-        self.combo_md_narrative = QComboBox()
-        self.combo_md_narrative.addItems(["짧은 문장 (모바일 최적화)", "긴 문장 (PC 최적화)"])
-        md_layout.addRow("서술 방식:", self.combo_md_narrative)
-        
-        self.output_tabs.addTab(md_widget, "📝 Markdown 설정")
-        
-        # HTML 설정 탭
-        html_widget = QWidget()
-        html_layout = QFormLayout(html_widget)
-        
-        self.combo_html_title = QComboBox()
-        self.combo_html_title.addItems(["<h2> 태그", "<h3> 태그", "<strong> 굵게만"])
-        html_layout.addRow("제목 스타일:", self.combo_html_title)
-        
-        self.combo_html_qa = QComboBox()
-        self.combo_html_qa.addItems(["<blockquote> 인용", "<div class='qa'> 커스텀", "<details> 접기형"])
-        html_layout.addRow("Q&A 스타일:", self.combo_html_qa)
-        
-        self.combo_html_color = QComboBox()
-        self.combo_html_color.addItems(["네이버 그린 (#03C75A)", "블루 (#4A90E2)", "오렌지 (#F39C12)", "그레이 (#666)"])
-        html_layout.addRow("테마 컬러:", self.combo_html_color)
-        
-        self.combo_html_font = QComboBox()
-        self.combo_html_font.addItems(["기본 (시스템)", "나눔고딕", "맑은 고딕"])
-        html_layout.addRow("본문 폰트:", self.combo_html_font)
-        
-        self.combo_html_box = QComboBox()
-        self.combo_html_box.addItems(["배경색 박스", "테두리 박스", "없음"])
-        html_layout.addRow("강조 박스:", self.combo_html_box)
-        
-        self.output_tabs.addTab(html_widget, "🌐 HTML 설정")
-        
-        output_layout.addWidget(self.output_tabs)
-        group_output.setLayout(output_layout)
-        layout.addWidget(group_output)
-
-        # 5. 실행 버튼 (원고 생성)
+        # 4. 실행 버튼 (원고 생성)
         btn_layout = QHBoxLayout()
         self.btn_gen_only = QPushButton("🔍 원고 생성 (미리보기)")
         self.btn_gen_only.setStyleSheet("background-color: #5D5D5D; color: white; font-weight: bold; padding: 12px;")
@@ -397,7 +323,7 @@ class InfoTab(QWidget):
         btn_layout.addWidget(self.btn_full_auto)
         layout.addLayout(btn_layout)
 
-        # 6. 결과 뷰어
+        # 5. 결과 뷰어
         layout.addWidget(QLabel("📝 생성된 글 미리보기"))
         self.result_tabs = QTabWidget()
         
@@ -416,8 +342,8 @@ class InfoTab(QWidget):
         self.result_tabs.setMinimumHeight(300)
         layout.addWidget(self.result_tabs)
 
-        # 7. 이미지 생성 (원고 생성 후 활성화)
-        self.group_image = QGroupBox("5. 이미지 생성 (원고 생성 후 활성화)")
+        # 6. 이미지 생성 (원고 생성 후 활성화)
+        self.group_image = QGroupBox("4. 이미지 생성 (원고 생성 후 활성화)")
         self.group_image.setEnabled(False)
         image_layout = QVBoxLayout()
         
@@ -489,7 +415,7 @@ class InfoTab(QWidget):
         self.group_image.setLayout(image_layout)
         layout.addWidget(self.group_image)
 
-        # 8. 최종 발행 버튼
+        # 7. 최종 발행 버튼
         self.btn_publish_now = QPushButton("📤 현재 내용으로 발행하기")
         self.btn_publish_now.setStyleSheet("background-color: #4A90E2; color: white; font-weight: bold; padding: 15px; font-size: 16px;")
         self.btn_publish_now.clicked.connect(lambda: self.request_start(action="publish_only"))
@@ -790,28 +716,37 @@ class InfoTab(QWidget):
         self._pending_illust_count = 0
 
     def get_output_style_settings(self) -> dict:
-        """출력 스타일 설정값"""
+        """출력 스타일 설정값 (환경설정 탭에서 가져옴)"""
+        if self.settings_tab:
+            return self.settings_tab.get_output_style_settings()
+        # 기본값 (settings_tab이 연결되지 않은 경우)
         return {
             "text": {
-                "heading": self.combo_text_heading.currentText(),
-                "emphasis": self.combo_text_emphasis.currentText(),
-                "divider": self.combo_text_divider.currentText(),
-                "spacing": self.combo_text_spacing.currentText(),
+                "heading": "【 】 대괄호",
+                "emphasis": "** 별표 **",
+                "divider": "━━━━━━ (실선)",
+                "spacing": "기본 (1줄)",
             },
             "markdown": {
-                "heading": self.combo_md_heading.currentText(),
-                "list": self.combo_md_list.currentText(),
-                "qa": self.combo_md_qa.currentText(),
-                "narrative": self.combo_md_narrative.currentText(),
+                "heading": "## H2 사용",
+                "list": "- 하이픈",
+                "qa": "> 인용문 스타일",
+                "narrative": "짧은 문장 (모바일 최적화)",
             },
             "html": {
-                "title": self.combo_html_title.currentText(),
-                "qa": self.combo_html_qa.currentText(),
-                "color": self.combo_html_color.currentText(),
-                "font": self.combo_html_font.currentText(),
-                "box": self.combo_html_box.currentText(),
+                "title": "<h2> 태그",
+                "qa": "<blockquote> 인용",
+                "color": "네이버 그린 (#03C75A)",
+                "font": "기본 (시스템)",
+                "box": "배경색 박스",
             }
         }
+    
+    def get_default_category(self) -> str:
+        """기본 카테고리 가져오기 (환경설정 탭에서)"""
+        if self.settings_tab:
+            return self.settings_tab.get_default_category()
+        return ""
 
     def get_selected_images(self) -> dict:
         """선택된 이미지들 반환"""
@@ -849,7 +784,13 @@ class InfoTab(QWidget):
             
             # 이미지 포함
             selected_images = self.get_selected_images()
-            data = {"action": action, "title": title, "content": content, "images": selected_images}
+            data = {
+                "action": action, 
+                "title": title, 
+                "content": content, 
+                "images": selected_images,
+                "category": self.get_default_category()  # 카테고리 정보 추가
+            }
             self.start_signal.emit(data)
             return
 
@@ -876,7 +817,8 @@ class InfoTab(QWidget):
             "questions": questions, "summary": self.txt_summary.toPlainText(),
             "insight": self.txt_insight.toPlainText(),
             "output_style": output_style,
-            "images": self.get_selected_images()
+            "images": self.get_selected_images(),
+            "category": self.get_default_category()  # 카테고리 정보 추가
         }
         self.start_signal.emit(data)
 
@@ -975,7 +917,7 @@ class InfoTab(QWidget):
         
         # 이미지 생성 섹션 활성화
         self.group_image.setEnabled(True)
-        self.group_image.setTitle("5. 이미지 생성 (본문 기반)")
+        self.group_image.setTitle("4. 이미지 생성 (본문 기반)")
         
         self.btn_publish_now.setEnabled(True)
         self.log_signal.emit("✨ 글 생성 완료! 이제 이미지를 생성하거나 바로 발행할 수 있습니다.")

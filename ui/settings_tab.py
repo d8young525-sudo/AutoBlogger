@@ -1,26 +1,40 @@
 """
-환경 설정 탭 - 네이버 계정, 고정 인사말/맺음말, 명함 이미지 설정
+환경 설정 탭 - 네이버 계정, 고정 인사말/맺음말, 명함 이미지, 출력 스타일, 카테고리 설정
+v3.3.0: 출력 스타일 설정 추가, 블로그 카테고리 설정 추가
 """
 import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, 
     QLineEdit, QTextEdit, QPushButton, QMessageBox,
-    QHBoxLayout, QLabel, QFileDialog
+    QHBoxLayout, QLabel, QFileDialog, QComboBox,
+    QTabWidget, QScrollArea, QListWidget, QListWidgetItem,
+    QAbstractItemView
 )
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtGui import QPixmap
 
 
 class SettingsTab(QWidget):
+    """환경 설정 탭"""
+    
+    # 설정 변경 시그널 (다른 탭에서 사용)
+    settings_changed = Signal()
+    
     def __init__(self):
         super().__init__()
         self.settings = QSettings("MySoft", "NaverBlogBot")
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout()
         
-        # 1. 네이버 계정 설정
+        # 스크롤 영역 추가
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        
+        # ========== 1. 네이버 계정 설정 ==========
         group_account = QGroupBox("🔐 네이버 계정 (블로그 발행용)")
         account_form = QFormLayout()
         
@@ -40,7 +54,58 @@ class SettingsTab(QWidget):
         group_account.setLayout(account_form)
         layout.addWidget(group_account)
         
-        # 2. 고정 인사말
+        # ========== 2. 블로그 카테고리 설정 (NEW) ==========
+        group_category = QGroupBox("📁 블로그 카테고리 설정")
+        category_layout = QVBoxLayout()
+        
+        category_desc = QLabel("블로그에 등록된 카테고리명을 입력하면 발행 시 자동으로 선택됩니다.")
+        category_desc.setStyleSheet("color: #666; font-size: 11px;")
+        category_layout.addWidget(category_desc)
+        
+        # 카테고리 입력
+        cat_form = QFormLayout()
+        
+        self.input_category = QLineEdit()
+        self.input_category.setPlaceholderText("예: 자동차/차량관리")
+        cat_form.addRow("기본 카테고리:", self.input_category)
+        
+        category_layout.addLayout(cat_form)
+        
+        # 카테고리 목록 관리
+        category_layout.addWidget(QLabel("📋 자주 사용하는 카테고리 목록:"))
+        
+        self.list_categories = QListWidget()
+        self.list_categories.setMaximumHeight(100)
+        self.list_categories.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.list_categories.itemDoubleClicked.connect(self._on_category_double_click)
+        category_layout.addWidget(self.list_categories)
+        
+        cat_btn_layout = QHBoxLayout()
+        
+        self.input_new_category = QLineEdit()
+        self.input_new_category.setPlaceholderText("새 카테고리 입력")
+        cat_btn_layout.addWidget(self.input_new_category)
+        
+        btn_add_cat = QPushButton("➕ 추가")
+        btn_add_cat.clicked.connect(self._add_category)
+        btn_add_cat.setStyleSheet("padding: 5px 10px;")
+        cat_btn_layout.addWidget(btn_add_cat)
+        
+        btn_del_cat = QPushButton("🗑️ 삭제")
+        btn_del_cat.clicked.connect(self._delete_category)
+        btn_del_cat.setStyleSheet("padding: 5px 10px;")
+        cat_btn_layout.addWidget(btn_del_cat)
+        
+        category_layout.addLayout(cat_btn_layout)
+        
+        cat_notice = QLabel("💡 더블클릭하면 기본 카테고리로 설정됩니다.")
+        cat_notice.setStyleSheet("color: #888; font-size: 11px;")
+        category_layout.addWidget(cat_notice)
+        
+        group_category.setLayout(category_layout)
+        layout.addWidget(group_category)
+        
+        # ========== 3. 고정 인사말 ==========
         group_intro = QGroupBox("👋 고정 인사말 (글 시작 부분)")
         intro_layout = QVBoxLayout()
         
@@ -52,7 +117,7 @@ class SettingsTab(QWidget):
         group_intro.setLayout(intro_layout)
         layout.addWidget(group_intro)
         
-        # 3. 고정 맺음말 + 명함 이미지
+        # ========== 4. 고정 맺음말 + 명함 이미지 ==========
         group_outro = QGroupBox("🤝 고정 맺음말 (글 마무리 부분)")
         outro_layout = QVBoxLayout()
         
@@ -70,7 +135,7 @@ class SettingsTab(QWidget):
         self.lbl_image_preview = QLabel()
         self.lbl_image_preview.setFixedSize(150, 90)
         self.lbl_image_preview.setStyleSheet("border: 1px solid #ddd; background-color: #f9f9f9;")
-        self.lbl_image_preview.setAlignment(Qt.AlignCenter if hasattr(Qt, 'AlignCenter') else 0x0004)
+        self.lbl_image_preview.setAlignment(Qt.AlignCenter)
         image_layout.addWidget(self.lbl_image_preview)
         
         # 이미지 버튼들
@@ -104,8 +169,92 @@ class SettingsTab(QWidget):
         group_outro.setLayout(outro_layout)
         layout.addWidget(group_outro)
         
-        # 저장 버튼
-        self.btn_save = QPushButton("💾 설정 저장")
+        # ========== 5. 출력 스타일 설정 (NEW - info_tab에서 이동) ==========
+        group_output = QGroupBox("🎨 출력 스타일 설정")
+        output_layout = QVBoxLayout()
+        
+        output_desc = QLabel("생성되는 글의 기본 스타일을 설정합니다. 자주 변경하지 않는 설정입니다.")
+        output_desc.setStyleSheet("color: #666; font-size: 11px;")
+        output_layout.addWidget(output_desc)
+        
+        self.output_tabs = QTabWidget()
+        
+        # TEXT 설정 탭
+        text_widget = QWidget()
+        text_layout = QFormLayout(text_widget)
+        
+        self.combo_text_heading = QComboBox()
+        self.combo_text_heading.addItems(["【 】 대괄호", "▶ 화살표", "● 원형", "■ 사각형", "※ 꽃표"])
+        text_layout.addRow("소제목 스타일:", self.combo_text_heading)
+        
+        self.combo_text_emphasis = QComboBox()
+        self.combo_text_emphasis.addItems(["** 별표 **", "「 」 꺽쇠", "★ ~ ★", "밑줄 ___"])
+        text_layout.addRow("강조 표현:", self.combo_text_emphasis)
+        
+        self.combo_text_divider = QComboBox()
+        self.combo_text_divider.addItems(["━━━━━━ (실선)", "- - - - - (점선)", "═══════ (이중선)", "빈 줄만"])
+        text_layout.addRow("구분선:", self.combo_text_divider)
+        
+        self.combo_text_spacing = QComboBox()
+        self.combo_text_spacing.addItems(["기본 (1줄)", "넓게 (2줄)", "좁게 (줄바꿈만)"])
+        text_layout.addRow("문단 간격:", self.combo_text_spacing)
+        
+        self.output_tabs.addTab(text_widget, "📄 Text")
+        
+        # MARKDOWN 설정 탭
+        md_widget = QWidget()
+        md_layout = QFormLayout(md_widget)
+        
+        self.combo_md_heading = QComboBox()
+        self.combo_md_heading.addItems(["## H2 사용", "### H3 사용", "**굵게** 사용"])
+        md_layout.addRow("헤딩 레벨:", self.combo_md_heading)
+        
+        self.combo_md_list = QComboBox()
+        self.combo_md_list.addItems(["- 하이픈", "* 별표", "1. 숫자"])
+        md_layout.addRow("목록 기호:", self.combo_md_list)
+        
+        self.combo_md_qa = QComboBox()
+        self.combo_md_qa.addItems(["> 인용문 스타일", "**Q:** 굵게 스타일", "### Q: 헤딩 스타일"])
+        md_layout.addRow("Q&A 표현:", self.combo_md_qa)
+        
+        self.combo_md_narrative = QComboBox()
+        self.combo_md_narrative.addItems(["짧은 문장 (모바일 최적화)", "긴 문장 (PC 최적화)"])
+        md_layout.addRow("서술 방식:", self.combo_md_narrative)
+        
+        self.output_tabs.addTab(md_widget, "📝 Markdown")
+        
+        # HTML 설정 탭
+        html_widget = QWidget()
+        html_layout = QFormLayout(html_widget)
+        
+        self.combo_html_title = QComboBox()
+        self.combo_html_title.addItems(["<h2> 태그", "<h3> 태그", "<strong> 굵게만"])
+        html_layout.addRow("제목 스타일:", self.combo_html_title)
+        
+        self.combo_html_qa = QComboBox()
+        self.combo_html_qa.addItems(["<blockquote> 인용", "<div class='qa'> 커스텀", "<details> 접기형"])
+        html_layout.addRow("Q&A 스타일:", self.combo_html_qa)
+        
+        self.combo_html_color = QComboBox()
+        self.combo_html_color.addItems(["네이버 그린 (#03C75A)", "블루 (#4A90E2)", "오렌지 (#F39C12)", "그레이 (#666)"])
+        html_layout.addRow("테마 컬러:", self.combo_html_color)
+        
+        self.combo_html_font = QComboBox()
+        self.combo_html_font.addItems(["기본 (시스템)", "나눔고딕", "맑은 고딕"])
+        html_layout.addRow("본문 폰트:", self.combo_html_font)
+        
+        self.combo_html_box = QComboBox()
+        self.combo_html_box.addItems(["배경색 박스", "테두리 박스", "없음"])
+        html_layout.addRow("강조 박스:", self.combo_html_box)
+        
+        self.output_tabs.addTab(html_widget, "🌐 HTML")
+        
+        output_layout.addWidget(self.output_tabs)
+        group_output.setLayout(output_layout)
+        layout.addWidget(group_output)
+        
+        # ========== 저장 버튼 ==========
+        self.btn_save = QPushButton("💾 모든 설정 저장")
         self.btn_save.clicked.connect(self.save_settings)
         self.btn_save.setStyleSheet("""
             background-color: #03C75A; 
@@ -117,17 +266,28 @@ class SettingsTab(QWidget):
         layout.addWidget(self.btn_save)
         
         layout.addStretch()
-        self.setLayout(layout)
+        
+        scroll.setWidget(content_widget)
+        main_layout.addWidget(scroll)
+        self.setLayout(main_layout)
         
         # 저장된 설정 로드
         self.load_settings()
     
     def load_settings(self):
         """저장된 설정 로드"""
+        # 계정 정보
         self.input_id.setText(self.settings.value("id", ""))
         self.input_pw.setText(self.settings.value("pw", ""))
         self.input_intro.setText(self.settings.value("intro", ""))
         self.input_outro.setText(self.settings.value("outro", ""))
+        
+        # 카테고리 설정
+        self.input_category.setText(self.settings.value("default_category", ""))
+        categories = self.settings.value("category_list", [])
+        if categories:
+            for cat in categories:
+                self.list_categories.addItem(cat)
         
         # 명함 이미지 로드
         outro_image = self.settings.value("outro_image", "")
@@ -136,6 +296,123 @@ class SettingsTab(QWidget):
             self.lbl_image_path.setText(f"📎 {os.path.basename(outro_image)}")
         else:
             self.lbl_image_preview.setText("이미지 없음")
+        
+        # 출력 스타일 설정 로드
+        self._load_output_style_settings()
+    
+    def _load_output_style_settings(self):
+        """출력 스타일 설정 로드"""
+        # Text 설정
+        self.combo_text_heading.setCurrentIndex(
+            self.settings.value("style_text_heading", 0, type=int))
+        self.combo_text_emphasis.setCurrentIndex(
+            self.settings.value("style_text_emphasis", 0, type=int))
+        self.combo_text_divider.setCurrentIndex(
+            self.settings.value("style_text_divider", 0, type=int))
+        self.combo_text_spacing.setCurrentIndex(
+            self.settings.value("style_text_spacing", 0, type=int))
+        
+        # Markdown 설정
+        self.combo_md_heading.setCurrentIndex(
+            self.settings.value("style_md_heading", 0, type=int))
+        self.combo_md_list.setCurrentIndex(
+            self.settings.value("style_md_list", 0, type=int))
+        self.combo_md_qa.setCurrentIndex(
+            self.settings.value("style_md_qa", 0, type=int))
+        self.combo_md_narrative.setCurrentIndex(
+            self.settings.value("style_md_narrative", 0, type=int))
+        
+        # HTML 설정
+        self.combo_html_title.setCurrentIndex(
+            self.settings.value("style_html_title", 0, type=int))
+        self.combo_html_qa.setCurrentIndex(
+            self.settings.value("style_html_qa", 0, type=int))
+        self.combo_html_color.setCurrentIndex(
+            self.settings.value("style_html_color", 0, type=int))
+        self.combo_html_font.setCurrentIndex(
+            self.settings.value("style_html_font", 0, type=int))
+        self.combo_html_box.setCurrentIndex(
+            self.settings.value("style_html_box", 0, type=int))
+    
+    def _save_output_style_settings(self):
+        """출력 스타일 설정 저장"""
+        # Text 설정
+        self.settings.setValue("style_text_heading", self.combo_text_heading.currentIndex())
+        self.settings.setValue("style_text_emphasis", self.combo_text_emphasis.currentIndex())
+        self.settings.setValue("style_text_divider", self.combo_text_divider.currentIndex())
+        self.settings.setValue("style_text_spacing", self.combo_text_spacing.currentIndex())
+        
+        # Markdown 설정
+        self.settings.setValue("style_md_heading", self.combo_md_heading.currentIndex())
+        self.settings.setValue("style_md_list", self.combo_md_list.currentIndex())
+        self.settings.setValue("style_md_qa", self.combo_md_qa.currentIndex())
+        self.settings.setValue("style_md_narrative", self.combo_md_narrative.currentIndex())
+        
+        # HTML 설정
+        self.settings.setValue("style_html_title", self.combo_html_title.currentIndex())
+        self.settings.setValue("style_html_qa", self.combo_html_qa.currentIndex())
+        self.settings.setValue("style_html_color", self.combo_html_color.currentIndex())
+        self.settings.setValue("style_html_font", self.combo_html_font.currentIndex())
+        self.settings.setValue("style_html_box", self.combo_html_box.currentIndex())
+    
+    def get_output_style_settings(self) -> dict:
+        """출력 스타일 설정값 반환 (다른 탭에서 사용)"""
+        return {
+            "text": {
+                "heading": self.combo_text_heading.currentText(),
+                "emphasis": self.combo_text_emphasis.currentText(),
+                "divider": self.combo_text_divider.currentText(),
+                "spacing": self.combo_text_spacing.currentText(),
+            },
+            "markdown": {
+                "heading": self.combo_md_heading.currentText(),
+                "list": self.combo_md_list.currentText(),
+                "qa": self.combo_md_qa.currentText(),
+                "narrative": self.combo_md_narrative.currentText(),
+            },
+            "html": {
+                "title": self.combo_html_title.currentText(),
+                "qa": self.combo_html_qa.currentText(),
+                "color": self.combo_html_color.currentText(),
+                "font": self.combo_html_font.currentText(),
+                "box": self.combo_html_box.currentText(),
+            }
+        }
+    
+    def get_default_category(self) -> str:
+        """기본 카테고리 반환"""
+        return self.input_category.text().strip()
+    
+    def get_category_list(self) -> list:
+        """카테고리 목록 반환"""
+        categories = []
+        for i in range(self.list_categories.count()):
+            categories.append(self.list_categories.item(i).text())
+        return categories
+    
+    def _add_category(self):
+        """카테고리 추가"""
+        new_cat = self.input_new_category.text().strip()
+        if new_cat:
+            # 중복 확인
+            for i in range(self.list_categories.count()):
+                if self.list_categories.item(i).text() == new_cat:
+                    QMessageBox.warning(self, "알림", "이미 존재하는 카테고리입니다.")
+                    return
+            
+            self.list_categories.addItem(new_cat)
+            self.input_new_category.clear()
+    
+    def _delete_category(self):
+        """선택된 카테고리 삭제"""
+        current_item = self.list_categories.currentItem()
+        if current_item:
+            self.list_categories.takeItem(self.list_categories.row(current_item))
+    
+    def _on_category_double_click(self, item):
+        """카테고리 더블클릭 시 기본 카테고리로 설정"""
+        self.input_category.setText(item.text())
+        QMessageBox.information(self, "설정 완료", f"'{item.text()}' 카테고리가 기본값으로 설정되었습니다.")
     
     def select_outro_image(self):
         """명함 이미지 선택"""
@@ -163,8 +440,8 @@ class SettingsTab(QWidget):
             # 미리보기 크기에 맞게 조정
             scaled = pixmap.scaled(
                 150, 90, 
-                Qt.KeepAspectRatio if hasattr(Qt, 'KeepAspectRatio') else 1,
-                Qt.SmoothTransformation if hasattr(Qt, 'SmoothTransformation') else 1
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
             )
             self.lbl_image_preview.setPixmap(scaled)
             return True
@@ -181,17 +458,21 @@ class SettingsTab(QWidget):
         QMessageBox.information(self, "완료", "명함 이미지가 삭제되었습니다.")
     
     def save_settings(self):
-        """설정 저장"""
+        """모든 설정 저장"""
+        # 계정 정보
         self.settings.setValue("id", self.input_id.text())
         self.settings.setValue("pw", self.input_pw.text())
         self.settings.setValue("intro", self.input_intro.toPlainText())
         self.settings.setValue("outro", self.input_outro.toPlainText())
         
-        QMessageBox.information(self, "완료", "설정이 저장되었습니다.")
-
-
-# Qt import 보완
-try:
-    from PySide6.QtCore import Qt
-except:
-    pass
+        # 카테고리 설정
+        self.settings.setValue("default_category", self.input_category.text().strip())
+        self.settings.setValue("category_list", self.get_category_list())
+        
+        # 출력 스타일 설정
+        self._save_output_style_settings()
+        
+        # 변경 알림
+        self.settings_changed.emit()
+        
+        QMessageBox.information(self, "완료", "모든 설정이 저장되었습니다.")

@@ -82,9 +82,12 @@ def run_gui():
             # Tab widget
             self.tabs = QTabWidget()
             
-            self.tab_info = InfoTab()
-            self.tab_delivery = DeliveryTab()
+            # 설정 탭을 먼저 생성 (다른 탭에서 참조하기 위해)
             self.tab_settings = SettingsTab()
+            
+            # info_tab에 settings_tab 연결 (출력 스타일 설정 가져오기용)
+            self.tab_info = InfoTab(settings_tab=self.tab_settings)
+            self.tab_delivery = DeliveryTab()
             
             self.tabs.addTab(self.tab_info, "📝 정보성 글쓰기")
             self.tabs.addTab(self.tab_delivery, "🚗 출고 후기")
@@ -266,7 +269,8 @@ def run_gui():
                 "intro": self.settings.value("intro", ""),
                 "outro": self.settings.value("outro", ""),
                 "outro_image": self.settings.value("outro_image", ""),  # 명함 이미지
-                "auth_token": self.id_token or ""
+                "auth_token": self.id_token or "",
+                "default_category": self.tab_settings.get_default_category()  # 기본 카테고리
             }
 
             # Create and start worker
