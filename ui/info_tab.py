@@ -1,6 +1,6 @@
 """
 정보성 글쓰기 탭 - 블로그 포스팅 자동 생성 기능
-v3.5.0: UI 간소화, TEXT만 생성, 글쓰기 환경설정 탭과 연동
+v3.5.1: 썸네일을 세부설정에 통합, 재생성 2회 제한
 """
 import requests
 import re
@@ -114,6 +114,12 @@ class InfoTab(QWidget):
         self.auth_token = ""
         self.generated_content = ""
         self.generated_title = ""
+        
+        # 썸네일 재생성 횟수 추적 (주제별)
+        self.current_topic_for_thumbnail = ""
+        self.thumbnail_regenerate_count = 0
+        self.max_regenerate_count = 2  # 최대 재생성 횟수
+        
         self.init_ui()
 
     def set_auth_token(self, token: str):
@@ -196,6 +202,7 @@ class InfoTab(QWidget):
         self.group_adv = QGroupBox("2. 세부 설정")
         self.group_adv.setCheckable(True)
         self.group_adv.setChecked(False)
+        self.group_adv.toggled.connect(self.on_detail_settings_toggled)
         adv_layout = QVBoxLayout()
         
         self.btn_analyze = QPushButton("🔍 주제 분석하기 (타겟/질문 추출)")
@@ -232,6 +239,52 @@ class InfoTab(QWidget):
         self.txt_insight.setMinimumHeight(80)
         adv_layout.addWidget(self.txt_insight)
         
+        # ========== 썸네일 이미지 (세부설정 내부) ==========
+        adv_layout.addWidget(QLabel(""))  # 여백
+        
+        thumb_header = QHBoxLayout()
+        thumb_header.addWidget(QLabel("🖼️ 대표 썸네일 이미지:"))
+        thumb_header.addStretch()
+        adv_layout.addLayout(thumb_header)
+        
+        thumb_desc = QLabel("세부 설정을 펼치면 주제에 맞는 썸네일이 자동 생성됩니다.")
+        thumb_desc.setStyleSheet("color: #666; font-size: 11px;")
+        adv_layout.addWidget(thumb_desc)
+        
+        # 썸네일 미리보기 + 재생성 버튼
+        thumb_row = QHBoxLayout()
+        
+        self.thumbnail_preview = QLabel()
+        self.thumbnail_preview.setFixedSize(200, 120)
+        self.thumbnail_preview.setStyleSheet("border: 1px dashed #ccc; background-color: #f9f9f9;")
+        self.thumbnail_preview.setAlignment(Qt.AlignCenter)
+        self.thumbnail_preview.setText("썸네일 대기중...")
+        thumb_row.addWidget(self.thumbnail_preview)
+        
+        # 오른쪽: 재생성 버튼 + 남은 횟수
+        thumb_btn_layout = QVBoxLayout()
+        
+        self.btn_regenerate_thumbnail = QPushButton("🔄 다른 이미지로")
+        self.btn_regenerate_thumbnail.clicked.connect(self.regenerate_thumbnail)
+        self.btn_regenerate_thumbnail.setStyleSheet("background-color: #9B59B6; color: white; padding: 8px;")
+        self.btn_regenerate_thumbnail.setEnabled(False)
+        thumb_btn_layout.addWidget(self.btn_regenerate_thumbnail)
+        
+        self.lbl_regenerate_count = QLabel("재생성 가능: 2회")
+        self.lbl_regenerate_count.setStyleSheet("color: #888; font-size: 11px;")
+        thumb_btn_layout.addWidget(self.lbl_regenerate_count)
+        
+        thumb_btn_layout.addStretch()
+        thumb_row.addLayout(thumb_btn_layout)
+        thumb_row.addStretch()
+        
+        adv_layout.addLayout(thumb_row)
+        
+        # 썸네일 사용 체크
+        self.chk_use_thumbnail = QCheckBox("✅ 이 썸네일 사용하여 발행")
+        self.chk_use_thumbnail.setEnabled(False)
+        adv_layout.addWidget(self.chk_use_thumbnail)
+        
         self.group_adv.setLayout(adv_layout)
         layout.addWidget(self.group_adv)
 
@@ -255,41 +308,7 @@ class InfoTab(QWidget):
         self.view_text.setMinimumHeight(350)
         layout.addWidget(self.view_text)
 
-        # ========== 5. 썸네일 이미지 생성 ==========
-        self.group_thumbnail = QGroupBox("5. 썸네일 이미지 생성")
-        self.group_thumbnail.setEnabled(False)
-        thumb_layout = QVBoxLayout()
-        
-        thumb_desc = QLabel("원고 주제를 기반으로 대표 썸네일 이미지를 생성합니다.")
-        thumb_desc.setStyleSheet("color: #666; font-size: 11px;")
-        thumb_layout.addWidget(thumb_desc)
-        
-        # 썸네일 미리보기
-        thumb_preview_row = QHBoxLayout()
-        self.thumbnail_preview = QLabel()
-        self.thumbnail_preview.setFixedSize(200, 120)
-        self.thumbnail_preview.setStyleSheet("border: 1px dashed #ccc; background-color: #fff;")
-        self.thumbnail_preview.setAlignment(Qt.AlignCenter)
-        self.thumbnail_preview.setText("썸네일 미리보기")
-        thumb_preview_row.addWidget(self.thumbnail_preview)
-        thumb_preview_row.addStretch()
-        thumb_layout.addLayout(thumb_preview_row)
-        
-        # 썸네일 생성 버튼
-        self.btn_gen_thumbnail = QPushButton("🖼️ 썸네일 생성하기")
-        self.btn_gen_thumbnail.clicked.connect(self.generate_thumbnail)
-        self.btn_gen_thumbnail.setStyleSheet("background-color: #9B59B6; color: white; padding: 10px; font-weight: bold;")
-        thumb_layout.addWidget(self.btn_gen_thumbnail)
-        
-        # 썸네일 사용 체크
-        self.chk_use_thumbnail = QCheckBox("✅ 이 썸네일 사용하여 발행")
-        self.chk_use_thumbnail.setEnabled(False)
-        thumb_layout.addWidget(self.chk_use_thumbnail)
-        
-        self.group_thumbnail.setLayout(thumb_layout)
-        layout.addWidget(self.group_thumbnail)
-
-        # ========== 6. 최종 발행 버튼 ==========
+        # ========== 5. 최종 발행 버튼 ==========
         self.btn_publish = QPushButton("📤 현재 내용으로 발행하기")
         self.btn_publish.setStyleSheet("""
             background-color: #4A90E2; 
@@ -305,6 +324,66 @@ class InfoTab(QWidget):
         scroll.setWidget(content_widget)
         main_layout.addWidget(scroll)
         self.setLayout(main_layout)
+
+    def on_detail_settings_toggled(self, checked: bool):
+        """세부 설정 펼침/접힘 시 호출"""
+        if checked:
+            # 세부 설정을 펼칠 때 썸네일 자동 생성
+            topic = self.get_selected_topic()
+            if topic:
+                # 주제가 변경되었는지 확인
+                if topic != self.current_topic_for_thumbnail:
+                    self.current_topic_for_thumbnail = topic
+                    self.thumbnail_regenerate_count = 0
+                    self.update_regenerate_count_label()
+                    self.generate_thumbnail_auto()
+                elif not self.thumbnail_image:
+                    # 같은 주제인데 썸네일이 없으면 생성
+                    self.generate_thumbnail_auto()
+
+    def generate_thumbnail_auto(self):
+        """썸네일 자동 생성 (세부설정 펼칠 때)"""
+        if not self.auth_token:
+            self.thumbnail_preview.setText("로그인 필요")
+            self.log_signal.emit("⚠️ 썸네일 생성은 로그인이 필요합니다.")
+            return
+        
+        topic = self.get_selected_topic()
+        if not topic:
+            self.thumbnail_preview.setText("주제를 선택하세요")
+            return
+        
+        self.thumbnail_preview.setText("⏳ 생성 중...")
+        self.btn_regenerate_thumbnail.setEnabled(False)
+        self.log_signal.emit(f"🖼️ '{topic}' 주제로 썸네일 이미지 생성 중...")
+        
+        self.thumbnail_worker = ImageGenerateWorker(topic, self.auth_token)
+        self.thumbnail_worker.finished.connect(self.on_thumbnail_finished)
+        self.thumbnail_worker.error.connect(self.on_thumbnail_error)
+        self.thumbnail_worker.start()
+
+    def regenerate_thumbnail(self):
+        """썸네일 재생성 (버튼 클릭 시)"""
+        if self.thumbnail_regenerate_count >= self.max_regenerate_count:
+            QMessageBox.warning(self, "제한 초과", 
+                f"이 주제에 대한 썸네일 재생성은 {self.max_regenerate_count}회까지만 가능합니다.\n"
+                "새로운 주제를 선택하면 다시 생성할 수 있습니다.")
+            return
+        
+        self.thumbnail_regenerate_count += 1
+        self.update_regenerate_count_label()
+        self.generate_thumbnail_auto()
+
+    def update_regenerate_count_label(self):
+        """재생성 가능 횟수 라벨 업데이트"""
+        remaining = self.max_regenerate_count - self.thumbnail_regenerate_count
+        self.lbl_regenerate_count.setText(f"재생성 가능: {remaining}회")
+        
+        if remaining <= 0:
+            self.lbl_regenerate_count.setStyleSheet("color: #E74C3C; font-size: 11px;")
+            self.btn_regenerate_thumbnail.setEnabled(False)
+        else:
+            self.lbl_regenerate_count.setStyleSheet("color: #888; font-size: 11px;")
 
     def toggle_topic_mode(self):
         """주제 입력 모드 토글"""
@@ -360,10 +439,30 @@ class InfoTab(QWidget):
         for t in topics:
             rb = QRadioButton(t)
             rb.setStyleSheet("font-size: 13px; padding: 5px;")
+            # 주제 선택 시 썸네일 초기화
+            rb.toggled.connect(self.on_topic_changed)
             self.topic_layout_inner.addWidget(rb)
             self.topic_group.addButton(rb)
             
         self.log_signal.emit(f"✅ {len(topics)}개의 트렌드 주제가 추천되었습니다.")
+
+    def on_topic_changed(self, checked: bool):
+        """주제 변경 시 호출"""
+        if checked:
+            # 주제가 변경되면 썸네일 관련 상태 초기화
+            new_topic = self.get_selected_topic()
+            if new_topic and new_topic != self.current_topic_for_thumbnail:
+                self.thumbnail_image = None
+                self.thumbnail_preview.setText("썸네일 대기중...")
+                self.chk_use_thumbnail.setChecked(False)
+                self.chk_use_thumbnail.setEnabled(False)
+                
+                # 세부설정이 펼쳐져 있으면 자동 생성
+                if self.group_adv.isChecked():
+                    self.current_topic_for_thumbnail = new_topic
+                    self.thumbnail_regenerate_count = 0
+                    self.update_regenerate_count_label()
+                    self.generate_thumbnail_auto()
 
     def on_recommend_error(self, error_msg: str):
         """추천 에러"""
@@ -506,27 +605,11 @@ class InfoTab(QWidget):
         }
         self.start_signal.emit(data)
 
-    def generate_thumbnail(self):
-        """썸네일 생성"""
-        if not self.auth_token:
-            QMessageBox.warning(self, "인증 필요", "이미지 생성은 로그인이 필요합니다.")
-            return
-        
-        topic = self.get_selected_topic() or self.generated_title or "블로그 글"
-        
-        self.btn_gen_thumbnail.setEnabled(False)
-        self.btn_gen_thumbnail.setText("⏳ 썸네일 생성 중...")
-        self.log_signal.emit(f"🖼️ '{topic}' 주제로 썸네일 이미지 생성 중...")
-        
-        self.thumbnail_worker = ImageGenerateWorker(topic, self.auth_token)
-        self.thumbnail_worker.finished.connect(self.on_thumbnail_finished)
-        self.thumbnail_worker.error.connect(self.on_thumbnail_error)
-        self.thumbnail_worker.start()
-
     def on_thumbnail_finished(self, images: list):
         """썸네일 생성 완료"""
-        self.btn_gen_thumbnail.setEnabled(True)
-        self.btn_gen_thumbnail.setText("🖼️ 썸네일 생성하기")
+        remaining = self.max_regenerate_count - self.thumbnail_regenerate_count
+        if remaining > 0:
+            self.btn_regenerate_thumbnail.setEnabled(True)
         
         if images:
             self.thumbnail_image = images[0]
@@ -546,8 +629,11 @@ class InfoTab(QWidget):
 
     def on_thumbnail_error(self, error_msg: str):
         """썸네일 생성 에러"""
-        self.btn_gen_thumbnail.setEnabled(True)
-        self.btn_gen_thumbnail.setText("🖼️ 썸네일 생성하기")
+        remaining = self.max_regenerate_count - self.thumbnail_regenerate_count
+        if remaining > 0:
+            self.btn_regenerate_thumbnail.setEnabled(True)
+        
+        self.thumbnail_preview.setText("생성 실패")
         self.log_signal.emit(f"❌ {error_msg}")
 
     def update_result_view(self, result_data):
@@ -578,13 +664,10 @@ class InfoTab(QWidget):
         self.btn_generate.setEnabled(True)
         self.btn_generate.setText("✅ 생성 완료!")
         
-        # 썸네일 섹션 활성화
-        self.group_thumbnail.setEnabled(True)
-        
         # 발행 버튼 활성화
         self.btn_publish.setEnabled(True)
         
-        self.log_signal.emit("✨ 글 생성 완료! 썸네일을 생성하거나 바로 발행할 수 있습니다.")
+        self.log_signal.emit("✨ 글 생성 완료! 확인 후 발행할 수 있습니다.")
 
     def reset_generate_button(self):
         """생성 버튼 초기화 (에러 시 호출)"""

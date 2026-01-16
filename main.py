@@ -90,9 +90,9 @@ def run_gui():
             # 기본 환경설정 탭
             self.tab_settings = SettingsTab()
             
-            # info_tab에 글쓰기 환경설정 탭 연결
+            # info_tab, delivery_tab에 글쓰기 환경설정 탭 연결
             self.tab_info = InfoTab(writing_settings_tab=self.tab_writing_settings)
-            self.tab_delivery = DeliveryTab()
+            self.tab_delivery = DeliveryTab(writing_settings_tab=self.tab_writing_settings)
             
             # 탭 추가 (순서 변경: 글쓰기 환경설정을 환경설정 앞에)
             self.tabs.addTab(self.tab_info, "📝 정보성 글쓰기")
