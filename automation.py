@@ -246,36 +246,53 @@ class NaverBlogBot:
             time.sleep(1)
             self._close_help_panel()  # 한번 더 시도
             
-            # Step 5: 에디터 로드 확인 (실제 네이버 에디터 구조에 맞게)
+            # Step 5: 에디터 로드 확인 (더 유연하게)
+            # 먼저 URL로 확인 (가장 빠름)
+            current_url = self.driver.current_url
+            logger.info(f"Current URL: {current_url}")
+            
+            if any(pattern in current_url for pattern in ["Redirect=Write", "PostWriteForm", "GoBlogWrite"]):
+                logger.info(f"Editor URL confirmed: {current_url}")
+                # URL은 맞지만, 에디터 요소가 로드될 때까지 추가 대기
+                time.sleep(3)
+                
+                # 에디터 요소 확인 시도 (실패해도 진행)
+                try:
+                    WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((
+                            By.CSS_SELECTOR, 
+                            ".se-section-documentTitle, .se-title-text, .se-text-paragraph, .se-placeholder"
+                        ))
+                    )
+                    logger.info("Editor elements found")
+                except TimeoutException:
+                    logger.warning("Editor elements not found, but URL is correct - proceeding anyway")
+                
+                return True, "Editor loaded (URL verified)"
+            
+            # URL이 안 맞으면 요소로 확인
             try:
-                # 에디터의 제목 영역 확인 - 실제 클래스: se-section-documentTitle, se-title-text
-                WebDriverWait(self.driver, 10).until(
+                WebDriverWait(self.driver, 15).until(
                     EC.presence_of_element_located((
                         By.CSS_SELECTOR, 
-                        ".se-section-documentTitle, .se-title-text, .se-text-paragraph"
+                        ".se-section-documentTitle, .se-title-text, .se-text-paragraph, .se-placeholder"
                     ))
                 )
-                logger.info("Editor loaded successfully")
+                logger.info("Editor loaded successfully (elements found)")
                 return True, "Editor loaded"
             except TimeoutException:
-                # URL 확인 - 다양한 패턴 체크
-                current_url = self.driver.current_url
-                if any(pattern in current_url for pattern in ["Redirect=Write", "PostWriteForm", "GoBlogWrite"]):
-                    logger.info(f"Editor loaded (URL verified): {current_url}")
-                    return True, "Editor loaded (URL verified)"
-                
-                # 추가: 에디터 iframe이나 다른 요소 확인
+                # 마지막 시도: placeholder 텍스트로 확인
                 try:
-                    # placeholder "제목" 텍스트로 확인
                     self.driver.find_element(
                         By.XPATH,
-                        "//span[contains(@class, 'se-placeholder') and text()='제목']"
+                        "//span[contains(@class, 'se-placeholder')]"
                     )
                     logger.info("Editor loaded (placeholder found)")
                     return True, "Editor loaded (placeholder found)"
                 except:
                     pass
                 
+                logger.error(f"Editor not found. Current URL: {current_url}")
                 return False, "Editor elements not found"
             
         except TimeoutException:
