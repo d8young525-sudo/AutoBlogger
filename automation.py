@@ -560,22 +560,25 @@ class NaverBlogBot:
         """
         본문 입력
         
-        네이버 에디터 본문 영역 구조:
-        <div class="se-component se-text">
-            <p class="se-text-paragraph" id="SE-xxxxx">
-                <span class="se-placeholder">글감과 함께 나의 일상을 기록해보세요!</span>
-            </p>
+        네이버 에디터 본문 영역 실제 구조:
+        <div class="se-section se-section-text ...">  <!-- 본문은 se-section-text -->
+            <div class="se-module se-module-text __se-unit ...">
+                <p class="se-text-paragraph ...">
+                    <span class="__se-node se-fs15">...</span>
+                    <span class="se-placeholder __se_placeholder se-fs15">글감과 함께...</span>
+                </p>
+            </div>
         </div>
         """
         try:
             logger.info("Inputting content...")
             
-            # 방법 1: 본문 placeholder 클릭
+            # 방법 1: 본문 placeholder 클릭 (실제 구조: se-section-text 내의 se-placeholder)
             try:
                 content_placeholder = WebDriverWait(self.driver, 5).until(
                     EC.element_to_be_clickable((
-                        By.XPATH,
-                        "//p[contains(@class, 'se-text-paragraph')]//span[contains(@class, 'se-placeholder') and contains(text(), '글감')]"
+                        By.CSS_SELECTOR,
+                        ".se-section-text .se-placeholder, .se-section-text span.__se_placeholder"
                     ))
                 )
                 content_placeholder.click()
@@ -593,58 +596,57 @@ class NaverBlogBot:
             except Exception as e:
                 logger.debug(f"Content placeholder method failed: {e}")
             
-            # 방법 2: 본문 영역 직접 찾기 (제목 영역 제외)
+            # 방법 2: 본문 영역 직접 찾기 (se-section-text 내의 p 태그)
             try:
-                # se-documentTitle이 아닌 se-text-paragraph 찾기
-                content_paras = self.driver.find_elements(
+                # se-section-text 내의 se-text-paragraph 찾기 (제목 영역 se-section-documentTitle 제외)
+                content_para = self.driver.find_element(
                     By.CSS_SELECTOR,
-                    "div.se-component.se-text p.se-text-paragraph"
+                    ".se-section-text p.se-text-paragraph"
                 )
+                content_para.click()
+                time.sleep(0.5)
                 
-                for para in content_paras:
-                    # 제목 영역이 아닌지 확인
-                    parent = para.find_element(By.XPATH, "./ancestor::div[contains(@class, 'se-component')]")
-                    if "se-documentTitle" not in parent.get_attribute("class"):
-                        para.click()
-                        time.sleep(0.5)
-                        
-                        if PYPERCLIP_AVAILABLE:
-                            pyperclip.copy(content)
-                            ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
-                        else:
-                            ActionChains(self.driver).send_keys(content).perform()
-                        
-                        logger.info("Content input success (paragraph method)")
-                        return True
+                if PYPERCLIP_AVAILABLE:
+                    pyperclip.copy(content)
+                    ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                else:
+                    ActionChains(self.driver).send_keys(content).perform()
+                
+                logger.info("Content input success (paragraph method)")
+                return True
             except Exception as e:
                 logger.debug(f"Content paragraph method failed: {e}")
             
-            # 방법 3: JavaScript로 직접 입력
+            # 방법 3: JavaScript로 직접 입력 (실제 구조: se-section-text)
             try:
                 result = self.driver.execute_script("""
-                    // 본문 영역 찾기 (제목 영역 제외)
-                    var textComponents = document.querySelectorAll('div.se-component.se-text p.se-text-paragraph');
+                    // 본문 영역 찾기 (se-section-text 내의 p 태그)
+                    var contentArea = document.querySelector('.se-section-text p.se-text-paragraph');
                     
-                    for (var i = 0; i < textComponents.length; i++) {
-                        var para = textComponents[i];
-                        var parent = para.closest('div.se-component');
+                    if (contentArea) {
+                        // 클릭하여 포커스
+                        contentArea.click();
                         
-                        // 제목 영역이 아닌 경우
-                        if (!parent.classList.contains('se-documentTitle')) {
-                            // placeholder 제거
-                            var placeholder = para.querySelector('span.se-placeholder');
-                            if (placeholder) {
-                                placeholder.remove();
-                            }
-                            
-                            // 텍스트 입력
-                            para.textContent = arguments[0];
-                            
-                            // 이벤트 발생
-                            para.dispatchEvent(new Event('input', {bubbles: true}));
-                            para.dispatchEvent(new Event('change', {bubbles: true}));
-                            return true;
+                        // placeholder 숨기기
+                        var placeholder = contentArea.querySelector('span.se-placeholder, span.__se_placeholder');
+                        if (placeholder) {
+                            placeholder.style.display = 'none';
                         }
+                        
+                        // 기존 __se-node span 찾거나 새로 생성
+                        var textSpan = contentArea.querySelector('span.__se-node');
+                        if (!textSpan) {
+                            textSpan = document.createElement('span');
+                            textSpan.className = '__se-node se-fs15';
+                            contentArea.insertBefore(textSpan, contentArea.firstChild);
+                        }
+                        textSpan.textContent = arguments[0];
+                        
+                        // 이벤트 발생
+                        contentArea.dispatchEvent(new Event('input', {bubbles: true}));
+                        contentArea.dispatchEvent(new Event('change', {bubbles: true}));
+                        contentArea.dispatchEvent(new Event('keyup', {bubbles: true}));
+                        return true;
                     }
                     return false;
                 """, content)
