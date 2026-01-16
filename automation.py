@@ -1,7 +1,7 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.5.2: 글쓰기 에디터 진입 플로우 개선, 카테고리 선택 기능 추가
+v3.5.4: 글쓰기 에디터 제목/본문 입력 개선, 도움말 패널 처리 강화
 """
 import time
 import logging
@@ -241,13 +241,18 @@ class NaverBlogBot:
             # Step 3: "작성 중인 글이 있습니다" 팝업 처리
             self._handle_draft_popup()
             
-            # Step 4: 에디터 로드 확인
+            # Step 4: 도움말 패널 닫기 (여러 번 시도)
+            self._close_help_panel()
+            time.sleep(1)
+            self._close_help_panel()  # 한번 더 시도
+            
+            # Step 5: 에디터 로드 확인
             try:
-                # 에디터의 제목 placeholder 확인
+                # 에디터의 제목 영역 확인
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((
                         By.CSS_SELECTOR, 
-                        ".se-placeholder, .se-text-paragraph, [class*='editor']"
+                        ".se-component.se-documentTitle, .se-text-paragraph"
                     ))
                 )
                 logger.info("Editor loaded successfully")
@@ -285,15 +290,14 @@ class NaverBlogBot:
             logger.info("No draft popup found")
         except Exception as e:
             logger.warning(f"Draft popup handling: {e}")
-        
-        # 도움말 패널 닫기
-        self._close_help_panel()
 
     def _close_help_panel(self):
         """
         도움말 패널이 있으면 닫기
+        여러 방법으로 시도
         """
         try:
+            # 방법 1: CSS 셀렉터로 닫기 버튼 찾기
             help_close_btn = WebDriverWait(self.driver, 3).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR, 
@@ -301,13 +305,67 @@ class NaverBlogBot:
                 ))
             )
             help_close_btn.click()
-            logger.info("Closed help panel")
+            logger.info("Closed help panel (CSS selector)")
             time.sleep(0.5)
+            return
         except TimeoutException:
-            # 도움말 패널이 없으면 정상 진행
             pass
         except Exception as e:
-            logger.warning(f"Help panel handling: {e}")
+            logger.debug(f"Help panel close attempt 1: {e}")
+        
+        try:
+            # 방법 2: 도움말 컨테이너 내 닫기 버튼 찾기
+            help_container = self.driver.find_element(
+                By.CSS_SELECTOR, 
+                "div.se-help-container"
+            )
+            if help_container:
+                close_btn = help_container.find_element(
+                    By.CSS_SELECTOR,
+                    "button.se-help-panel-close-button"
+                )
+                close_btn.click()
+                logger.info("Closed help panel (container method)")
+                time.sleep(0.5)
+                return
+        except NoSuchElementException:
+            pass
+        except Exception as e:
+            logger.debug(f"Help panel close attempt 2: {e}")
+        
+        try:
+            # 방법 3: JavaScript로 닫기 버튼 클릭
+            self.driver.execute_script("""
+                var closeBtn = document.querySelector('button.se-help-panel-close-button');
+                if (closeBtn) {
+                    closeBtn.click();
+                    return true;
+                }
+                return false;
+            """)
+            logger.info("Closed help panel (JavaScript)")
+            time.sleep(0.5)
+            return
+        except Exception as e:
+            logger.debug(f"Help panel close attempt 3: {e}")
+        
+        try:
+            # 방법 4: 도움말 패널 자체를 숨기기
+            self.driver.execute_script("""
+                var helpContainer = document.querySelector('div.se-help-container');
+                if (helpContainer) {
+                    helpContainer.style.display = 'none';
+                    return true;
+                }
+                return false;
+            """)
+            logger.info("Hidden help panel (JavaScript hide)")
+            time.sleep(0.5)
+        except Exception as e:
+            logger.debug(f"Help panel close attempt 4: {e}")
+        
+        # 도움말 패널이 없으면 정상 진행
+        logger.info("No help panel found or already closed")
 
     def write_content(self, title: str, content: str) -> Tuple[bool, str]:
         """
@@ -326,55 +384,21 @@ class NaverBlogBot:
         try:
             logger.info("Writing content...")
             
+            # 먼저 도움말 패널 닫기 (혹시 남아있으면)
+            self._close_help_panel()
+            time.sleep(1)
+            
             # Step 1: 제목 입력
-            # 제목 placeholder 클릭
-            try:
-                title_area = self.wait.until(
-                    EC.element_to_be_clickable((
-                        By.CSS_SELECTOR, 
-                        ".se-placeholder.se-fs32, span.se-placeholder[class*='fs32']"
-                    ))
-                )
-                title_area.click()
-            except:
-                # 대안: 제목 텍스트로 찾기
-                title_area = self.wait.until(
-                    EC.element_to_be_clickable((
-                        By.XPATH, 
-                        "//span[contains(@class, 'se-placeholder') and text()='제목']"
-                    ))
-                )
-                title_area.click()
-            
-            time.sleep(0.5)
-            
-            # 제목 입력
-            if not self.clipboard_input(title):
-                ActionChains(self.driver).send_keys(title).perform()
+            title_success = self._input_title(title)
+            if not title_success:
+                return False, "Failed to input title"
             
             time.sleep(1)
             
             # Step 2: 본문 입력
-            # 본문 placeholder 클릭
-            try:
-                content_area = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    ".se-placeholder.se-fs15, span.se-placeholder[class*='fs15']"
-                )
-                content_area.click()
-            except:
-                # 대안: 본문 텍스트로 찾기
-                content_area = self.driver.find_element(
-                    By.XPATH, 
-                    "//span[contains(@class, 'se-placeholder') and contains(text(), '글감과')]"
-                )
-                content_area.click()
-            
-            time.sleep(0.5)
-            
-            # 본문 입력
-            if not self.clipboard_input(content):
-                ActionChains(self.driver).send_keys(content).perform()
+            content_success = self._input_content(content)
+            if not content_success:
+                return False, "Failed to input content"
             
             time.sleep(2)
             
@@ -388,6 +412,271 @@ class NaverBlogBot:
         except Exception as e:
             logger.error(f"Failed to write content: {e}")
             return False, f"Write error: {str(e)}"
+
+    def _input_title(self, title: str) -> bool:
+        """
+        제목 입력
+        
+        네이버 에디터 제목 영역 구조:
+        <div class="se-component se-documentTitle">
+            <div class="se-component-content">
+                <div class="se-section se-section-documentTitle">
+                    <div class="se-module se-module-text">
+                        <p class="se-text-paragraph" id="SE-xxxxx">
+                            <span class="se-placeholder">제목</span>  ← 이걸 클릭
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """
+        try:
+            logger.info("Inputting title...")
+            
+            # 방법 1: 제목 placeholder 클릭
+            try:
+                title_placeholder = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((
+                        By.XPATH,
+                        "//div[contains(@class, 'se-documentTitle')]//span[contains(@class, 'se-placeholder') and text()='제목']"
+                    ))
+                )
+                title_placeholder.click()
+                time.sleep(0.5)
+                
+                # 제목 입력
+                if PYPERCLIP_AVAILABLE:
+                    pyperclip.copy(title)
+                    ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                else:
+                    ActionChains(self.driver).send_keys(title).perform()
+                
+                logger.info("Title input success (placeholder method)")
+                return True
+            except Exception as e:
+                logger.debug(f"Title placeholder method failed: {e}")
+            
+            # 방법 2: 제목 영역의 p 태그 클릭
+            try:
+                title_para = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    "div.se-documentTitle p.se-text-paragraph"
+                )
+                title_para.click()
+                time.sleep(0.5)
+                
+                if PYPERCLIP_AVAILABLE:
+                    pyperclip.copy(title)
+                    ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                else:
+                    ActionChains(self.driver).send_keys(title).perform()
+                
+                logger.info("Title input success (paragraph method)")
+                return True
+            except Exception as e:
+                logger.debug(f"Title paragraph method failed: {e}")
+            
+            # 방법 3: JavaScript로 직접 입력
+            try:
+                result = self.driver.execute_script("""
+                    // 제목 영역 찾기
+                    var titleArea = document.querySelector('div.se-documentTitle p.se-text-paragraph');
+                    if (titleArea) {
+                        // placeholder 제거
+                        var placeholder = titleArea.querySelector('span.se-placeholder');
+                        if (placeholder) {
+                            placeholder.remove();
+                        }
+                        
+                        // 텍스트 노드 추가
+                        titleArea.textContent = arguments[0];
+                        
+                        // 입력 이벤트 발생
+                        titleArea.dispatchEvent(new Event('input', {bubbles: true}));
+                        titleArea.dispatchEvent(new Event('change', {bubbles: true}));
+                        return true;
+                    }
+                    return false;
+                """, title)
+                
+                if result:
+                    logger.info("Title input success (JavaScript method)")
+                    return True
+            except Exception as e:
+                logger.debug(f"Title JavaScript method failed: {e}")
+            
+            # 방법 4: Tab 키로 제목 영역 이동 후 입력
+            try:
+                # 페이지 클릭 후 Tab으로 제목 영역 이동
+                body = self.driver.find_element(By.TAG_NAME, "body")
+                body.click()
+                time.sleep(0.3)
+                
+                # Tab 키로 제목으로 이동
+                ActionChains(self.driver).send_keys(Keys.TAB).perform()
+                time.sleep(0.3)
+                
+                if PYPERCLIP_AVAILABLE:
+                    pyperclip.copy(title)
+                    ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                else:
+                    ActionChains(self.driver).send_keys(title).perform()
+                
+                logger.info("Title input success (Tab method)")
+                return True
+            except Exception as e:
+                logger.debug(f"Title Tab method failed: {e}")
+            
+            logger.error("All title input methods failed")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Title input error: {e}")
+            return False
+
+    def _input_content(self, content: str) -> bool:
+        """
+        본문 입력
+        
+        네이버 에디터 본문 영역 구조:
+        <div class="se-component se-text">
+            <p class="se-text-paragraph" id="SE-xxxxx">
+                <span class="se-placeholder">글감과 함께 나의 일상을 기록해보세요!</span>
+            </p>
+        </div>
+        """
+        try:
+            logger.info("Inputting content...")
+            
+            # 방법 1: 본문 placeholder 클릭
+            try:
+                content_placeholder = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((
+                        By.XPATH,
+                        "//p[contains(@class, 'se-text-paragraph')]//span[contains(@class, 'se-placeholder') and contains(text(), '글감')]"
+                    ))
+                )
+                content_placeholder.click()
+                time.sleep(0.5)
+                
+                # 본문 입력
+                if PYPERCLIP_AVAILABLE:
+                    pyperclip.copy(content)
+                    ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                else:
+                    ActionChains(self.driver).send_keys(content).perform()
+                
+                logger.info("Content input success (placeholder method)")
+                return True
+            except Exception as e:
+                logger.debug(f"Content placeholder method failed: {e}")
+            
+            # 방법 2: 본문 영역 직접 찾기 (제목 영역 제외)
+            try:
+                # se-documentTitle이 아닌 se-text-paragraph 찾기
+                content_paras = self.driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "div.se-component.se-text p.se-text-paragraph"
+                )
+                
+                for para in content_paras:
+                    # 제목 영역이 아닌지 확인
+                    parent = para.find_element(By.XPATH, "./ancestor::div[contains(@class, 'se-component')]")
+                    if "se-documentTitle" not in parent.get_attribute("class"):
+                        para.click()
+                        time.sleep(0.5)
+                        
+                        if PYPERCLIP_AVAILABLE:
+                            pyperclip.copy(content)
+                            ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                        else:
+                            ActionChains(self.driver).send_keys(content).perform()
+                        
+                        logger.info("Content input success (paragraph method)")
+                        return True
+            except Exception as e:
+                logger.debug(f"Content paragraph method failed: {e}")
+            
+            # 방법 3: JavaScript로 직접 입력
+            try:
+                result = self.driver.execute_script("""
+                    // 본문 영역 찾기 (제목 영역 제외)
+                    var textComponents = document.querySelectorAll('div.se-component.se-text p.se-text-paragraph');
+                    
+                    for (var i = 0; i < textComponents.length; i++) {
+                        var para = textComponents[i];
+                        var parent = para.closest('div.se-component');
+                        
+                        // 제목 영역이 아닌 경우
+                        if (!parent.classList.contains('se-documentTitle')) {
+                            // placeholder 제거
+                            var placeholder = para.querySelector('span.se-placeholder');
+                            if (placeholder) {
+                                placeholder.remove();
+                            }
+                            
+                            // 텍스트 입력
+                            para.textContent = arguments[0];
+                            
+                            // 이벤트 발생
+                            para.dispatchEvent(new Event('input', {bubbles: true}));
+                            para.dispatchEvent(new Event('change', {bubbles: true}));
+                            return true;
+                        }
+                    }
+                    return false;
+                """, content)
+                
+                if result:
+                    logger.info("Content input success (JavaScript method)")
+                    return True
+            except Exception as e:
+                logger.debug(f"Content JavaScript method failed: {e}")
+            
+            # 방법 4: Tab 키로 본문 영역 이동 후 입력
+            try:
+                # 제목 입력 후 Tab으로 본문으로 이동
+                ActionChains(self.driver).send_keys(Keys.TAB).perform()
+                time.sleep(0.3)
+                
+                if PYPERCLIP_AVAILABLE:
+                    pyperclip.copy(content)
+                    ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                else:
+                    ActionChains(self.driver).send_keys(content).perform()
+                
+                logger.info("Content input success (Tab method)")
+                return True
+            except Exception as e:
+                logger.debug(f"Content Tab method failed: {e}")
+            
+            # 방법 5: 에디터 본문 영역 클릭 후 입력
+            try:
+                # 에디터 메인 영역 클릭
+                editor_main = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    "div.se-content, div[class*='editor-content'], main.se-viewer"
+                )
+                editor_main.click()
+                time.sleep(0.5)
+                
+                if PYPERCLIP_AVAILABLE:
+                    pyperclip.copy(content)
+                    ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                else:
+                    ActionChains(self.driver).send_keys(content).perform()
+                
+                logger.info("Content input success (editor area method)")
+                return True
+            except Exception as e:
+                logger.debug(f"Content editor area method failed: {e}")
+            
+            logger.error("All content input methods failed")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Content input error: {e}")
+            return False
 
     def publish_post(self, category: str = "") -> Tuple[bool, str]:
         """
