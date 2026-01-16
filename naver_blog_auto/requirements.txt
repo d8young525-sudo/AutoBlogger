@@ -1,0 +1,5 @@
+pyside6
+selenium
+webdriver-manager
+pyperclip
+firebase-admin
