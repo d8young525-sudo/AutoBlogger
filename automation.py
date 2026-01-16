@@ -246,21 +246,36 @@ class NaverBlogBot:
             time.sleep(1)
             self._close_help_panel()  # 한번 더 시도
             
-            # Step 5: 에디터 로드 확인
+            # Step 5: 에디터 로드 확인 (실제 네이버 에디터 구조에 맞게)
             try:
-                # 에디터의 제목 영역 확인
+                # 에디터의 제목 영역 확인 - 실제 클래스: se-section-documentTitle, se-title-text
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((
                         By.CSS_SELECTOR, 
-                        ".se-component.se-documentTitle, .se-text-paragraph"
+                        ".se-section-documentTitle, .se-title-text, .se-text-paragraph"
                     ))
                 )
                 logger.info("Editor loaded successfully")
                 return True, "Editor loaded"
             except TimeoutException:
-                # URL 확인
-                if "PostWriteForm" in self.driver.current_url or "GoBlogWrite" in self.driver.current_url:
+                # URL 확인 - 다양한 패턴 체크
+                current_url = self.driver.current_url
+                if any(pattern in current_url for pattern in ["Redirect=Write", "PostWriteForm", "GoBlogWrite"]):
+                    logger.info(f"Editor loaded (URL verified): {current_url}")
                     return True, "Editor loaded (URL verified)"
+                
+                # 추가: 에디터 iframe이나 다른 요소 확인
+                try:
+                    # placeholder "제목" 텍스트로 확인
+                    self.driver.find_element(
+                        By.XPATH,
+                        "//span[contains(@class, 'se-placeholder') and text()='제목']"
+                    )
+                    logger.info("Editor loaded (placeholder found)")
+                    return True, "Editor loaded (placeholder found)"
+                except:
+                    pass
+                
                 return False, "Editor elements not found"
             
         except TimeoutException:
@@ -417,28 +432,24 @@ class NaverBlogBot:
         """
         제목 입력
         
-        네이버 에디터 제목 영역 구조:
-        <div class="se-component se-documentTitle">
-            <div class="se-component-content">
-                <div class="se-section se-section-documentTitle">
-                    <div class="se-module se-module-text">
-                        <p class="se-text-paragraph" id="SE-xxxxx">
-                            <span class="se-placeholder">제목</span>  ← 이걸 클릭
-                        </p>
-                    </div>
-                </div>
+        네이버 에디터 제목 영역 실제 구조:
+        <div class="se-section se-section-documentTitle ...">
+            <div class="se-module se-module-text ... se-title-text ...">
+                <p class="se-text-paragraph ...">
+                    <span class="se-placeholder __se_placeholder se-fs32">제목</span>
+                </p>
             </div>
         </div>
         """
         try:
             logger.info("Inputting title...")
             
-            # 방법 1: 제목 placeholder 클릭
+            # 방법 1: 제목 placeholder 클릭 (실제 구조: se-section-documentTitle 내의 se-placeholder)
             try:
                 title_placeholder = WebDriverWait(self.driver, 5).until(
                     EC.element_to_be_clickable((
-                        By.XPATH,
-                        "//div[contains(@class, 'se-documentTitle')]//span[contains(@class, 'se-placeholder') and text()='제목']"
+                        By.CSS_SELECTOR,
+                        ".se-section-documentTitle .se-placeholder, .se-title-text .se-placeholder"
                     ))
                 )
                 title_placeholder.click()
@@ -456,11 +467,11 @@ class NaverBlogBot:
             except Exception as e:
                 logger.debug(f"Title placeholder method failed: {e}")
             
-            # 방법 2: 제목 영역의 p 태그 클릭
+            # 방법 2: 제목 영역의 p 태그 클릭 (실제 구조)
             try:
                 title_para = self.driver.find_element(
                     By.CSS_SELECTOR,
-                    "div.se-documentTitle p.se-text-paragraph"
+                    ".se-section-documentTitle p.se-text-paragraph, .se-title-text p.se-text-paragraph"
                 )
                 title_para.click()
                 time.sleep(0.5)
@@ -476,24 +487,35 @@ class NaverBlogBot:
             except Exception as e:
                 logger.debug(f"Title paragraph method failed: {e}")
             
-            # 방법 3: JavaScript로 직접 입력
+            # 방법 3: JavaScript로 직접 입력 (실제 구조에 맞게)
             try:
                 result = self.driver.execute_script("""
-                    // 제목 영역 찾기
-                    var titleArea = document.querySelector('div.se-documentTitle p.se-text-paragraph');
+                    // 제목 영역 찾기 (실제 구조: se-section-documentTitle 또는 se-title-text)
+                    var titleArea = document.querySelector('.se-section-documentTitle p.se-text-paragraph') ||
+                                   document.querySelector('.se-title-text p.se-text-paragraph');
                     if (titleArea) {
+                        // 클릭하여 포커스
+                        titleArea.click();
+                        
                         // placeholder 제거
                         var placeholder = titleArea.querySelector('span.se-placeholder');
                         if (placeholder) {
-                            placeholder.remove();
+                            placeholder.style.display = 'none';
                         }
                         
-                        // 텍스트 노드 추가
-                        titleArea.textContent = arguments[0];
+                        // 기존 span 찾거나 새로 생성
+                        var textSpan = titleArea.querySelector('span.__se-node');
+                        if (!textSpan) {
+                            textSpan = document.createElement('span');
+                            textSpan.className = '__se-node';
+                            titleArea.appendChild(textSpan);
+                        }
+                        textSpan.textContent = arguments[0];
                         
                         // 입력 이벤트 발생
                         titleArea.dispatchEvent(new Event('input', {bubbles: true}));
                         titleArea.dispatchEvent(new Event('change', {bubbles: true}));
+                        titleArea.dispatchEvent(new Event('keyup', {bubbles: true}));
                         return true;
                     }
                     return false;
