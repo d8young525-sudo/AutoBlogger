@@ -285,6 +285,29 @@ class NaverBlogBot:
             logger.info("No draft popup found")
         except Exception as e:
             logger.warning(f"Draft popup handling: {e}")
+        
+        # 도움말 패널 닫기
+        self._close_help_panel()
+
+    def _close_help_panel(self):
+        """
+        도움말 패널이 있으면 닫기
+        """
+        try:
+            help_close_btn = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR, 
+                    "button.se-help-panel-close-button"
+                ))
+            )
+            help_close_btn.click()
+            logger.info("Closed help panel")
+            time.sleep(0.5)
+        except TimeoutException:
+            # 도움말 패널이 없으면 정상 진행
+            pass
+        except Exception as e:
+            logger.warning(f"Help panel handling: {e}")
 
     def write_content(self, title: str, content: str) -> Tuple[bool, str]:
         """

@@ -644,13 +644,16 @@ class InfoTab(QWidget):
         content = result_data.get("content_text", "") or result_data.get("content", "")
         
         # JSON 형태로 온 경우 정리
-        if content.startswith("{") and '"content"' in content:
+        if content and content.strip().startswith("{"):
             try:
                 import json
                 parsed = json.loads(content)
                 content = parsed.get("content_text", "") or parsed.get("content", content)
             except:
                 pass
+        
+        # 마크다운/HTML 형식이 섞여 있으면 순수 텍스트로 정리
+        content = self._clean_to_plain_text(content)
         
         # 생성된 본문 저장
         self.generated_content = content
@@ -668,6 +671,49 @@ class InfoTab(QWidget):
         self.btn_publish.setEnabled(True)
         
         self.log_signal.emit("✨ 글 생성 완료! 확인 후 발행할 수 있습니다.")
+
+    def _clean_to_plain_text(self, content: str) -> str:
+        """
+        마크다운/HTML이 섞인 콘텐츠를 순수 텍스트로 정리
+        """
+        if not content:
+            return content
+        
+        import re
+        
+        # HTML 태그 제거
+        content = re.sub(r'<[^>]+>', '', content)
+        
+        # 마크다운 헤딩 (#, ##, ###) -> 일반 소제목 스타일
+        content = re.sub(r'^#{1,3}\s*(.+)$', r'【\1】', content, flags=re.MULTILINE)
+        
+        # 마크다운 볼드 (**text** 또는 __text__)
+        content = re.sub(r'\*\*(.+?)\*\*', r'\1', content)
+        content = re.sub(r'__(.+?)__', r'\1', content)
+        
+        # 마크다운 이탤릭 (*text* 또는 _text_) - 단어 내부 언더스코어는 유지
+        content = re.sub(r'(?<!\w)\*([^*]+)\*(?!\w)', r'\1', content)
+        content = re.sub(r'(?<!\w)_([^_]+)_(?!\w)', r'\1', content)
+        
+        # 마크다운 인용문 (> text)
+        content = re.sub(r'^>\s*', '', content, flags=re.MULTILINE)
+        
+        # 마크다운 코드블록 (```...```)
+        content = re.sub(r'```[\s\S]*?```', '', content)
+        
+        # 인라인 코드 (`code`)
+        content = re.sub(r'`([^`]+)`', r'\1', content)
+        
+        # 마크다운 링크 [text](url) -> text
+        content = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', content)
+        
+        # 마크다운 이미지 ![alt](url) 제거
+        content = re.sub(r'!\[[^\]]*\]\([^)]+\)', '', content)
+        
+        # 연속된 빈 줄 정리
+        content = re.sub(r'\n{3,}', '\n\n', content)
+        
+        return content.strip()
 
     def reset_generate_button(self):
         """생성 버튼 초기화 (에러 시 호출)"""
