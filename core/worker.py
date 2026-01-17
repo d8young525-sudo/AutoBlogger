@@ -161,6 +161,7 @@ class AutomationWorker(QThread):
         """Execute blog publishing"""
         title = self.data.get('title', '')
         content = self.data.get('content', '')
+        category = self.data.get('category', '') or self.settings.get('default_category', '')
         
         if not title or not content:
             self.log_signal.emit("❌ 발행할 내용이 없습니다.")
@@ -175,6 +176,11 @@ class AutomationWorker(QThread):
 
         # Create bot instance with context manager for proper cleanup
         self.bot = NaverBlogBot()
+        
+        # 카테고리 설정
+        if category:
+            self.bot.set_category(category)
+            self.log_signal.emit(f"📁 카테고리: {category}")
         
         try:
             # Step 1: Start browser
@@ -225,11 +231,11 @@ class AutomationWorker(QThread):
             if self._is_cancelled:
                 return
             
-            # Step 5: Publish
+            # Step 5: Publish (with category)
             self.log_signal.emit("📤 발행 중...")
             self.progress_signal.emit(95)
             
-            success, msg = self.bot.publish_post()
+            success, msg = self.bot.publish_post(category=category)
             if success:
                 self.log_signal.emit("🎉 발행 완료!")
                 self.progress_signal.emit(100)

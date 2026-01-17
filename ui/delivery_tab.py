@@ -1,5 +1,6 @@
 """
 출고 후기 탭 - 차량 출고 후기 자동 포스팅 기능
+v3.5.1: 작성 스타일을 글쓰기 환경설정 탭으로 통합
 사진 업로드, 상담 후기 입력, 개인정보 블러 처리 지원
 """
 import os
@@ -141,8 +142,9 @@ class DeliveryTab(QWidget):
     start_signal = Signal(dict)
     log_signal = Signal(str)
     
-    def __init__(self):
+    def __init__(self, writing_settings_tab=None):
         super().__init__()
+        self.writing_settings_tab = writing_settings_tab  # 글쓰기 환경설정 탭 참조
         self.image_paths: List[str] = []
         self.processed_paths: List[str] = []
         self.init_ui()
@@ -263,42 +265,17 @@ class DeliveryTab(QWidget):
         group_review.setLayout(review_layout)
         layout.addWidget(group_review)
         
-        # 5. 스타일 설정
-        group_style = QGroupBox("5. 작성 스타일")
-        style_form = QFormLayout()
-        
-        self.combo_tone = QComboBox()
-        self.combo_tone.addItems([
-            "친근한 이웃 (해요체)", 
-            "신뢰감 있는 전문가 (하십시오체)",
-            "유머러스하고 재치있는",
-            "감성적인 에세이 스타일"
-        ])
-        style_form.addRow("글 말투:", self.combo_tone)
-        
-        self.combo_emoji = QComboBox()
-        self.combo_emoji.addItems(["사용 안 함 (텍스트만)", "조금 사용 (강조용)", "많이 사용 (화려하게)"])
-        style_form.addRow("이모지:", self.combo_emoji)
-        
-        group_style.setLayout(style_form)
-        layout.addWidget(group_style)
-        
-        # 6. 실행 버튼
-        btn_layout2 = QHBoxLayout()
+        # 5. 실행 버튼 (작성 스타일 섹션 제거됨 - 글쓰기 환경설정에서 관리)
+        style_notice = QLabel("💡 작성 스타일(말투, 분량 등)은 [글쓰기 환경설정] 탭에서 통합 관리됩니다.")
+        style_notice.setStyleSheet("color: #666; font-size: 11px; padding: 5px 0;")
+        layout.addWidget(style_notice)
         
         self.btn_generate = QPushButton("📝 후기 글 생성하기")
-        self.btn_generate.setStyleSheet("background-color: #5D5D5D; color: white; font-weight: bold; padding: 12px;")
+        self.btn_generate.setStyleSheet("background-color: #03C75A; color: white; font-weight: bold; padding: 15px; font-size: 16px;")
         self.btn_generate.clicked.connect(self.generate_review)
+        layout.addWidget(self.btn_generate)
         
-        self.btn_generate_publish = QPushButton("🚀 생성 + 바로 발행")
-        self.btn_generate_publish.setStyleSheet("background-color: #03C75A; color: white; font-weight: bold; padding: 12px;")
-        self.btn_generate_publish.clicked.connect(self.generate_and_publish)
-        
-        btn_layout2.addWidget(self.btn_generate)
-        btn_layout2.addWidget(self.btn_generate_publish)
-        layout.addLayout(btn_layout2)
-        
-        # 7. 결과 미리보기
+        # 6. 결과 미리보기
         layout.addWidget(QLabel("📝 생성된 후기 미리보기"))
         self.result_view = QTextEdit()
         self.result_view.setMinimumHeight(300)
@@ -344,6 +321,11 @@ class DeliveryTab(QWidget):
         
     def get_form_data(self) -> dict:
         """폼 데이터 수집"""
+        # 글쓰기 환경설정에서 톤 가져오기
+        tone = "친근한 이웃 (해요체)"
+        if self.writing_settings_tab:
+            tone = self.writing_settings_tab.get_default_tone()
+        
         return {
             'customer_info': {
                 'age_group': self.combo_age.currentText() if self.combo_age.currentText() != "선택 안함" else "",
@@ -358,8 +340,7 @@ class DeliveryTab(QWidget):
                 'options': self.input_options.text().strip()
             },
             'review_text': self.txt_review.toPlainText().strip(),
-            'tone': self.combo_tone.currentText(),
-            'emoji_level': self.combo_emoji.currentText(),
+            'tone': tone,
             'image_paths': self.image_paths,
             'blur_faces': self.chk_blur_faces.isChecked(),
             'blur_plates': self.chk_blur_plates.isChecked()
@@ -382,6 +363,7 @@ class DeliveryTab(QWidget):
             
         data = self.get_form_data()
         data['action'] = 'generate'
+        data['mode'] = 'delivery'
         
         self.btn_generate.setEnabled(False)
         self.btn_generate.setText("⏳ 생성 중...")
@@ -392,27 +374,10 @@ class DeliveryTab(QWidget):
         self.worker.log.connect(lambda msg: self.log_signal.emit(msg))
         self.worker.start()
         
-    def generate_and_publish(self):
-        """생성 후 바로 발행"""
-        if not self.validate_form():
-            return
-            
-        data = self.get_form_data()
-        data['action'] = 'full'
-        
-        self.btn_generate_publish.setEnabled(False)
-        self.btn_generate_publish.setText("⏳ 생성 중...")
-        
-        self.worker = DeliveryPostWorker(data)
-        self.worker.finished.connect(self.on_full_generation_finished)
-        self.worker.error.connect(self.on_generation_error)
-        self.worker.log.connect(lambda msg: self.log_signal.emit(msg))
-        self.worker.start()
-        
     def on_generation_finished(self, result: dict):
         """생성 완료 처리"""
         self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("📝 후기 글 생성하기")
+        self.btn_generate.setText("✅ 생성 완료!")
         
         title = result.get('title', '출고 후기')
         content = result.get('content', '') or result.get('content_text', '')
@@ -421,30 +386,10 @@ class DeliveryTab(QWidget):
         self.btn_publish.setEnabled(True)
         self.log_signal.emit("✅ 출고 후기 생성 완료! 확인 후 발행해주세요.")
         
-    def on_full_generation_finished(self, result: dict):
-        """생성+발행 완료 처리"""
-        self.btn_generate_publish.setEnabled(True)
-        self.btn_generate_publish.setText("🚀 생성 + 바로 발행")
-        
-        title = result.get('title', '출고 후기')
-        content = result.get('content', '') or result.get('content_text', '')
-        
-        self.result_view.setText(f"제목: {title}\n\n{content}")
-        
-        # 발행 요청
-        data = {
-            'action': 'publish_only',
-            'title': title,
-            'content': content
-        }
-        self.start_signal.emit(data)
-        
     def on_generation_error(self, error_msg: str):
         """에러 처리"""
         self.btn_generate.setEnabled(True)
         self.btn_generate.setText("📝 후기 글 생성하기")
-        self.btn_generate_publish.setEnabled(True)
-        self.btn_generate_publish.setText("🚀 생성 + 바로 발행")
         self.log_signal.emit(f"❌ {error_msg}")
         
     def publish_now(self):
@@ -461,10 +406,32 @@ class DeliveryTab(QWidget):
         if len(lines) > 0 and lines[0].startswith("제목:"):
             title = lines[0].replace("제목:", "").strip()
             body = "\n".join(lines[1:]).strip()
+        
+        # 카테고리 가져오기
+        category = ""
+        if self.writing_settings_tab:
+            category = self.writing_settings_tab.get_delivery_category()
             
         data = {
             'action': 'publish_only',
+            'mode': 'delivery',
             'title': title,
-            'content': body
+            'content': body,
+            'category': category
         }
         self.start_signal.emit(data)
+
+    def update_result_view(self, result_data):
+        """결과 뷰어 업데이트"""
+        title = result_data.get("title", "출고 후기")
+        content = result_data.get("content_text", "") or result_data.get("content", "")
+        
+        self.result_view.setText(f"제목: {title}\n\n{content}")
+        self.btn_generate.setEnabled(True)
+        self.btn_generate.setText("✅ 생성 완료!")
+        self.btn_publish.setEnabled(True)
+
+    def reset_generate_button(self):
+        """생성 버튼 초기화 (에러 시 호출)"""
+        self.btn_generate.setEnabled(True)
+        self.btn_generate.setText("📝 후기 글 생성하기")

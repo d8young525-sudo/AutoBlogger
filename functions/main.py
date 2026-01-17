@@ -2,6 +2,7 @@ import os
 import json
 import base64
 import logging
+import random
 from datetime import datetime
 from firebase_functions import https_fn
 from firebase_functions.options import CorsOptions
@@ -158,6 +159,140 @@ def increment_usage(uid: str, count: int = 1):
         logging.error(f"Failed to increment usage: {e}")
 
 
+# ============================================
+# 동적 프롬프트 생성 시스템
+# ============================================
+
+def get_dynamic_context():
+    """실시간 컨텍스트 생성 - 매 요청마다 다른 변수"""
+    now = datetime.now()
+    
+    # 요일별 테마
+    weekday_themes = {
+        0: "주말 드라이브 준비",  # 월요일
+        1: "자동차 관리 팁",
+        2: "중고차 시장 동향", 
+        3: "신차 소식",
+        4: "주말 여행 준비",  # 금요일
+        5: "가족 나들이",  # 토요일
+        6: "다음 주 준비"  # 일요일
+    }
+    
+    # 계절별 키워드
+    month = now.month
+    if month in [3, 4, 5]:
+        season = "봄"
+        season_keywords = ["봄맞이 세차", "황사 대비", "에어컨 점검", "봄나들이", "꽃구경 드라이브"]
+    elif month in [6, 7, 8]:
+        season = "여름"
+        season_keywords = ["에어컨 관리", "장마철 대비", "여름휴가 차량점검", "타이어 공기압", "냉각수 점검"]
+    elif month in [9, 10, 11]:
+        season = "가을"
+        season_keywords = ["단풍 드라이브", "가을철 차량관리", "겨울 대비", "히터 점검", "부동액 교체"]
+    else:
+        season = "겨울"
+        season_keywords = ["동절기 관리", "스노우타이어", "배터리 점검", "결빙 주의", "워셔액 보충"]
+    
+    # 관점/앵글 다양화
+    perspectives = [
+        "비용 절감 관점",
+        "초보 운전자 관점",
+        "가족 중심 관점",
+        "성능/퍼포먼스 관점",
+        "친환경/전기차 관점",
+        "안전 중심 관점",
+        "중고차 구매자 관점",
+        "장거리 운전자 관점",
+        "출퇴근 운전자 관점",
+        "주말 드라이버 관점"
+    ]
+    
+    # 콘텐츠 유형 다양화
+    content_types = [
+        "비교 분석 (A vs B)",
+        "체크리스트/가이드",
+        "흔한 실수와 해결법",
+        "숨겨진 팁 공개",
+        "실제 경험담 기반",
+        "전문가 인터뷰 형식",
+        "Q&A 형식",
+        "타임라인/순서 가이드",
+        "비용 분석표",
+        "before/after 비교"
+    ]
+    
+    # 세부 카테고리 (자동차)
+    sub_categories = [
+        "신차 정보", "중고차 팁", "자동차 관리", "보험/금융",
+        "튜닝/액세서리", "전기차/하이브리드", "수입차", "국산차",
+        "SUV/RV", "세단", "경차", "상용차",
+        "자동차 여행", "드라이브 코스", "주차 팁", "운전 습관",
+        "자동차 세금", "명의이전", "폐차", "리스/렌트"
+    ]
+    
+    return {
+        "date": now.strftime("%Y년 %m월 %d일"),
+        "weekday": ["월", "화", "수", "목", "금", "토", "일"][now.weekday()],
+        "weekday_theme": weekday_themes[now.weekday()],
+        "season": season,
+        "season_keyword": random.choice(season_keywords),
+        "perspective": random.choice(perspectives),
+        "content_type": random.choice(content_types),
+        "sub_category": random.choice(sub_categories),
+        "hour": now.hour,
+        "random_seed": random.randint(1, 1000)  # 추가 랜덤성
+    }
+
+
+def build_dynamic_recommend_prompt(category: str, context: dict) -> str:
+    """2단계 동적 프롬프트 생성"""
+    
+    prompt = f"""
+    [CONTEXT - 오늘의 조건]
+    - 오늘 날짜: {context['date']} ({context['weekday']}요일)
+    - 계절: {context['season']}
+    - 오늘의 테마: {context['weekday_theme']}
+    - 계절 키워드: {context['season_keyword']}
+    - 랜덤 시드: {context['random_seed']}
+    
+    [TASK 1] 먼저 Google 검색으로 다음을 조사하세요:
+    1. 오늘/이번 주 자동차 관련 뉴스나 이슈
+    2. 네이버/구글에서 "{category}" 관련 인기 검색어
+    3. 최근 자동차 커뮤니티에서 화제인 주제
+    4. {context['season']}철 자동차 관련 관심사
+    
+    [TASK 2] 위 조사 결과를 바탕으로 블로그 주제 5개를 추천하세요.
+    
+    [필수 조건]
+    - 세부 분야: {context['sub_category']} 관점 포함
+    - 콘텐츠 유형: {context['content_type']} 스타일 1개 이상 포함
+    - 타깃 관점: {context['perspective']}에서 1개 이상
+    - 계절감: {context['season_keyword']} 관련 1개 포함
+    
+    [다양성 규칙]
+    - 5개 주제는 서로 완전히 다른 세부 분야여야 함
+    - 일반적인 "자동차 관리법" 같은 뻔한 제목 금지
+    - 구체적인 숫자, 차종명, 상황이 포함된 제목
+    - 클릭을 유도하는 호기심 자극 제목
+    
+    [좋은 예시]
+    - "2026년 1월 중고차 시세 폭락? 지금 사야 할 차 TOP 5"
+    - "겨울철 배터리 방전, 이 3가지만 하면 100% 예방"
+    - "아반떼 N vs 쏘나타 N라인, 직접 타보니 충격적인 차이"
+    - "주차장에서 문콕 당했을 때 보상받는 완벽 가이드"
+    
+    [나쁜 예시 - 이런 건 금지]
+    - "자동차 관리하는 방법"
+    - "겨울철 차량 점검 팁"
+    - "신차 구매 가이드"
+    
+    반드시 아래 JSON 형식으로만 응답하세요:
+    {{"topics": ["주제1", "주제2", "주제3", "주제4", "주제5"], "trend_keywords": ["검색에서 발견한 트렌드 키워드 3개"]}}
+    """
+    
+    return prompt
+
+
 @https_fn.on_request(
     region="asia-northeast3", 
     timeout_sec=300, 
@@ -244,31 +379,26 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                 )
 
         # ============================================
-        # [모드 1] 주제 추천 (Grounding 적용 - 실시간 검색)
+        # [모드 1] 주제 추천 (동적 프롬프트 + Grounding)
         # ============================================
         elif mode == "recommend":
             category = req_json.get("category", "자동차")
             
-            # Google Search Grounding 활성화
-            prompt = f"""
-            당신은 자동차 전문 블로거입니다.
-            '{category}' 관련 최신 트렌드를 반영하여 조회수가 높을 만한 블로그 주제 5개를 추천해주세요.
+            # 동적 컨텍스트 생성
+            context = get_dynamic_context()
             
-            요구사항:
-            - 최신 트렌드와 실제 검색량이 높은 키워드 반영
-            - 구체적이고 클릭을 유도하는 제목
-            - 정보성과 실용성이 있는 주제
+            # 동적 프롬프트 생성
+            prompt = build_dynamic_recommend_prompt(category, context)
             
-            반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
-            {{"topics": ["주제1", "주제2", "주제3", "주제4", "주제5"]}}
-            """
+            logging.info(f"Recommend request - context: {context['sub_category']}, {context['perspective']}, seed: {context['random_seed']}")
             
             # Grounding with Google Search
             resp = client.models.generate_content(
                 model=MODEL_NAME, 
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    tools=[types.Tool(google_search=types.GoogleSearch())]
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    temperature=0.9  # 더 창의적인 응답
                 )
             )
             
@@ -282,6 +412,15 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                 if start_idx != -1 and end_idx > start_idx:
                     json_str = raw_text[start_idx:end_idx]
                     parsed = json.loads(json_str)
+                    
+                    # 응답에 컨텍스트 정보 추가 (디버깅/참고용)
+                    parsed["context"] = {
+                        "date": context["date"],
+                        "theme": context["weekday_theme"],
+                        "season": context["season"],
+                        "perspective": context["perspective"]
+                    }
+                    
                     return https_fn.Response(
                         json.dumps(parsed), 
                         status=200, 
@@ -308,16 +447,31 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
         elif mode == "analyze":
             topic = req_json.get("topic", "")
             
+            # 동적 컨텍스트
+            context = get_dynamic_context()
+            
             prompt = f"""
-            주제 '{topic}'에 대한 마케팅 분석을 해주세요.
+            주제 '{topic}'에 대한 심층 마케팅 분석을 해주세요.
             
-            최신 정보를 검색하여 다음을 분석해주세요:
-            1. 이 주제에 관심을 가질 타깃 독자층 (3~5개)
-            2. 독자들이 실제로 궁금해하는 질문 (5~7개)
-            3. 반드시 포함해야 할 핵심 정보 (5~7개)
+            [오늘의 컨텍스트]
+            - 날짜: {context['date']} ({context['weekday']}요일)
+            - 계절: {context['season']}
             
-            반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
-            {{"targets": ["타깃1", "타깃2", ...], "questions": ["질문1", "질문2", ...], "key_points": ["포인트1", "포인트2", ...]}}
+            Google 검색으로 최신 정보를 조사하여 다음을 분석해주세요:
+            
+            1. 타깃 독자층 (4~5개)
+               - 구체적인 상황/니즈 포함 (예: "첫 차 구매 고민 중인 사회초년생")
+            
+            2. 독자들이 실제로 궁금해하는 질문 (6~8개)
+               - 네이버 지식인, 자동차 커뮤니티에서 실제로 묻는 질문
+               - 구체적인 상황이 담긴 질문
+            
+            3. 반드시 포함해야 할 핵심 정보 (6~8개)
+               - 최신 데이터, 가격, 비교 정보 포함
+               - {context['season']}철 관련 정보 1개 이상
+            
+            반드시 아래 JSON 형식으로만 응답하세요:
+            {{"targets": ["타깃1 (상황 설명)", "타깃2", ...], "questions": ["구체적 질문1", "질문2", ...], "key_points": ["핵심정보1 (수치 포함)", "포인트2", ...]}}
             """
             
             resp = client.models.generate_content(
