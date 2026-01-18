@@ -20,6 +20,11 @@ SUPPORTED_CATEGORIES = {
 
 DEFAULT_CATEGORY = "차량관리 상식"
 
+# Google Search Grounding 도구 설정
+def get_grounding_tool():
+    """Google Search Grounding 도구 반환"""
+    return types.Tool(google_search=types.GoogleSearch())
+
 
 @https_fn.on_request(region="asia-northeast3", timeout_sec=300, secrets=["GEMINI_API_KEY"])
 def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
@@ -48,32 +53,57 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
     MODEL_NAME = "gemini-3-flash-preview"
 
     try:
-        # [Mode 1] Topic Recommendation - 카테고리 기반 동적 주제 추천
+        # [Mode 1] Topic Recommendation - Google Search Grounding으로 실시간 트렌드 기반 주제 추천
         if mode == "recommend":
-            prompt = f"""
-            당신은 네이버 블로그 콘텐츠 전략가입니다.
+            # Step 1: Google Search Grounding으로 최신 트렌드 검색
+            trend_prompt = f"""
+            "{category}" 관련 최신 뉴스, 트렌드, 이슈를 검색해서 알려주세요.
+            
+            검색 키워드: {category_keywords}
+            
+            최근 1개월 내 화제가 된 내용, 법규 변경, 신제품 출시, 시즌 이슈 등을 중심으로 알려주세요.
+            """
+            
+            # Grounding으로 실시간 트렌드 검색
+            grounding_response = client.models.generate_content(
+                model=MODEL_NAME,
+                contents=trend_prompt,
+                config=types.GenerateContentConfig(
+                    tools=[get_grounding_tool()]
+                )
+            )
+            
+            # 검색된 트렌드 정보 추출
+            trend_info = grounding_response.text
+            
+            # Step 2: 트렌드 기반으로 블로그 주제 생성
+            topic_prompt = f"""
+            당신은 네이버 자동차 블로그 콘텐츠 전략가입니다.
             
             [카테고리]
             {category}
             
-            [관련 키워드]
-            {category_keywords}
+            [최신 트렌드 정보 (Google 검색 결과)]
+            {trend_info}
             
             [요청사항]
-            위 카테고리에 맞는 블로그 주제를 5개 추천해주세요.
+            위 최신 트렌드를 바탕으로 네이버 블로그에 올릴 주제를 5개 추천해주세요.
             
             [조건]
-            1. 네이버 검색량이 높을 것으로 예상되는 주제
-            2. 클릭을 유도하는 구체적이고 매력적인 주제
-            3. 현재 시즌/트렌드를 반영한 시의성 있는 주제
-            4. 각 주제는 명확하고 구체적이어야 함
+            1. 위 트렌드 정보를 반영한 시의성 있는 주제
+            2. 네이버 검색량이 높을 것으로 예상되는 주제  
+            3. 클릭을 유도하는 구체적이고 매력적인 제목 형태
+            4. 일반인이 검색할 법한 실용적인 주제
+            5. 각 주제는 30자 내외로 명확하게
             
             [출력 형식]
-            JSON 형식 (key: topics, value: 문자열 배열)
+            반드시 JSON 형식으로만 출력 (key: topics, value: 문자열 배열)
+            예시: {{"topics": ["주제1", "주제2", "주제3", "주제4", "주제5"]}}
             """
+            
             response = client.models.generate_content(
                 model=MODEL_NAME,
-                contents=prompt,
+                contents=topic_prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
             return https_fn.Response(response.text.replace("```json", "").replace("```", "").strip(), status=200, mimetype="application/json")
