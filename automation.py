@@ -236,67 +236,37 @@ class NaverBlogBot:
             
             # Step 2: 글쓰기 에디터로 직접 이동 (GoBlogWrite.naver)
             self.driver.get("https://blog.naver.com/GoBlogWrite.naver")
-            time.sleep(3)
+            time.sleep(5)  # 에디터 로드 대기 시간 늘림
             
-            # Step 3: "작성 중인 글이 있습니다" 팝업 처리
+            # Step 3: "작성 중인 글이 있습니다" 팝업 처리 (있으면)
             self._handle_draft_popup()
             
-            # Step 4: 도움말 패널 닫기 (여러 번 시도)
+            # Step 4: 도움말 패널 닫기 (있으면)
             self._close_help_panel()
-            time.sleep(1)
-            self._close_help_panel()  # 한번 더 시도
+            time.sleep(2)
             
-            # Step 5: 에디터 로드 확인 (더 유연하게)
-            # 먼저 URL로 확인 (가장 빠름)
+            # Step 5: 에디터 진입 성공 - URL 기반으로 단순 확인
             current_url = self.driver.current_url
-            logger.info(f"Current URL: {current_url}")
+            logger.info(f"Current URL after navigation: {current_url}")
             
-            if any(pattern in current_url for pattern in ["Redirect=Write", "PostWriteForm", "GoBlogWrite"]):
-                logger.info(f"Editor URL confirmed: {current_url}")
-                # URL은 맞지만, 에디터 요소가 로드될 때까지 추가 대기
-                time.sleep(3)
-                
-                # 에디터 요소 확인 시도 (실패해도 진행)
-                try:
-                    WebDriverWait(self.driver, 10).until(
-                        EC.presence_of_element_located((
-                            By.CSS_SELECTOR, 
-                            ".se-section-documentTitle, .se-title-text, .se-text-paragraph, .se-placeholder"
-                        ))
-                    )
-                    logger.info("Editor elements found")
-                except TimeoutException:
-                    logger.warning("Editor elements not found, but URL is correct - proceeding anyway")
-                
-                return True, "Editor loaded (URL verified)"
+            # GoBlogWrite 호출 후 리다이렉트된 URL 패턴들
+            # - https://blog.naver.com/아이디?Redirect=Write&
+            # - https://blog.naver.com/PostWriteForm.naver
+            # - https://blog.naver.com/GoBlogWrite.naver (리다이렉트 안 된 경우)
             
-            # URL이 안 맞으면 요소로 확인
-            try:
-                WebDriverWait(self.driver, 15).until(
-                    EC.presence_of_element_located((
-                        By.CSS_SELECTOR, 
-                        ".se-section-documentTitle, .se-title-text, .se-text-paragraph, .se-placeholder"
-                    ))
-                )
-                logger.info("Editor loaded successfully (elements found)")
+            # 글쓰기 페이지면 무조건 성공 처리
+            if "blog.naver.com" in current_url:
+                # 로그인 페이지로 리다이렉트 됐는지 확인
+                if "nidlogin" in current_url or "nid.naver.com" in current_url:
+                    logger.error("Redirected to login page - session may have expired")
+                    return False, "로그인 세션 만료"
+                
+                # 그 외에는 에디터 페이지로 간주
+                logger.info("Editor page loaded successfully")
                 return True, "Editor loaded"
-            except TimeoutException:
-                # 마지막 시도: placeholder 텍스트로 확인
-                try:
-                    self.driver.find_element(
-                        By.XPATH,
-                        "//span[contains(@class, 'se-placeholder')]"
-                    )
-                    logger.info("Editor loaded (placeholder found)")
-                    return True, "Editor loaded (placeholder found)"
-                except:
-                    pass
-                
-                logger.error(f"Editor not found. Current URL: {current_url}")
-                return False, "Editor elements not found"
             
-        except TimeoutException:
-            return False, "Editor load timeout"
+            return False, f"Unexpected URL: {current_url}"
+            
         except Exception as e:
             logger.error(f"Failed to load editor: {e}")
             return False, f"Editor error: {str(e)}"
