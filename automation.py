@@ -1,11 +1,10 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.6.2: Chrome 비밀번호 팝업 완전 차단 및 에디터 안정화
-- Chrome 비밀번호/자동완성 팝업 완전 차단 (추가 옵션)
-- 사용자 데이터 디렉토리 지정으로 세션 유지
-- iframe 전환 안정화
-- 에디터 입력 로직 강화
+v3.6.3: 팝업 처리 최적화 및 에디터 안정화
+- 팝업 처리: WebDriverWait → find_elements 즉시 체크 (5초 대기 제거)
+- 에디터 포커스 안정화
+- 불필요한 대기 시간 단축
 """
 import time
 import logging
@@ -362,38 +361,38 @@ class NaverBlogBot:
             return False
 
     def _handle_popups(self):
-        """팝업들 처리 (드래프트 팝업, 도움말 패널 등)"""
-        # 드래프트 팝업 처리
-        try:
-            cancel_btn = WebDriverWait(self.driver, 3).until(
-                EC.element_to_be_clickable((
-                    By.CSS_SELECTOR, 
-                    "button.se-popup-button-cancel"
-                ))
-            )
-            cancel_btn.click()
-            logger.info("Closed draft popup")
-            time.sleep(0.5)
-        except TimeoutException:
-            logger.info("No draft popup")
-        except Exception as e:
-            logger.debug(f"Draft popup: {e}")
+        """팝업들 처리 (드래프트 팝업, 도움말 패널 등) - 빠른 체크 방식"""
         
-        # 도움말 패널 처리
+        # 드래프트 팝업 처리 (즉시 체크, 대기 없음)
         try:
-            help_close_btn = WebDriverWait(self.driver, 2).until(
-                EC.element_to_be_clickable((
-                    By.CSS_SELECTOR, 
-                    "button.se-help-panel-close-button"
-                ))
+            # find_elements는 없으면 빈 리스트 반환 (예외 없음, 대기 없음)
+            cancel_btns = self.driver.find_elements(
+                By.CSS_SELECTOR, 
+                "button.se-popup-button-cancel"
             )
-            help_close_btn.click()
-            logger.info("Closed help panel")
-            time.sleep(0.5)
-        except TimeoutException:
-            logger.info("No help panel")
+            if cancel_btns and cancel_btns[0].is_displayed():
+                cancel_btns[0].click()
+                logger.info("Closed draft popup")
+                time.sleep(0.3)
+            else:
+                logger.info("No draft popup")
         except Exception as e:
-            logger.debug(f"Help panel: {e}")
+            logger.debug(f"Draft popup check: {e}")
+        
+        # 도움말 패널 처리 (즉시 체크, 대기 없음)
+        try:
+            help_btns = self.driver.find_elements(
+                By.CSS_SELECTOR, 
+                "button.se-help-panel-close-button"
+            )
+            if help_btns and help_btns[0].is_displayed():
+                help_btns[0].click()
+                logger.info("Closed help panel")
+                time.sleep(0.3)
+            else:
+                logger.info("No help panel")
+        except Exception as e:
+            logger.debug(f"Help panel check: {e}")
 
     def write_content(self, title: str, content: str) -> Tuple[bool, str]:
         """
@@ -418,9 +417,19 @@ class NaverBlogBot:
                 logger.error("Failed to switch to mainFrame")
                 return False, "Failed to switch to editor frame"
             
+            # 에디터가 완전히 로드될 때까지 잠시 대기
+            time.sleep(1)
+            
             # 에디터 요소 확인
             logger.info("Checking for editor elements...")
             self._log_editor_state()
+            
+            # 에디터 영역 안정화를 위해 body 클릭
+            try:
+                self.driver.find_element(By.CSS_SELECTOR, ".se-component-content").click()
+                time.sleep(0.3)
+            except:
+                pass
             
             # Step 1: 제목 입력
             logger.info(f"Inputting title: {title[:30]}...")
@@ -430,7 +439,7 @@ class NaverBlogBot:
                 return False, "Failed to input title"
             logger.info("Title input SUCCESS")
             
-            time.sleep(1)
+            time.sleep(0.5)
             
             # Step 2: 본문 입력
             logger.info(f"Inputting content ({len(content)} chars)...")
@@ -440,7 +449,7 @@ class NaverBlogBot:
                 return False, "Failed to input content"
             logger.info("Content input SUCCESS")
             
-            time.sleep(2)
+            time.sleep(1)
             
             logger.info("=== write_content() 완료 ===")
             return True, "Content written"
