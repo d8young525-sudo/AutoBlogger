@@ -1,10 +1,10 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.5.9: 에디터 로드 대기 및 입력 로직 대폭 개선
-- iframe 처리 추가
-- 실제 요소 대기 로직 강화
-- 디버깅 로그 추가
+v3.6.0: mainFrame iframe 진입 로직 추가
+- 에디터가 #mainFrame iframe 안에 있음 확인
+- switch_to.frame("mainFrame") 으로 iframe 전환 후 요소 조작
+- 모든 입력/발행 메서드에 iframe 전환 로직 추가
 """
 import time
 import logging
@@ -276,6 +276,66 @@ class NaverBlogBot:
             logger.error(f"Failed to load editor: {e}")
             return False, f"Editor error: {str(e)}"
 
+    def _switch_to_editor_frame(self) -> bool:
+        """
+        에디터가 있는 mainFrame iframe으로 전환
+        
+        네이버 블로그 에디터는 #mainFrame iframe 안에 있음
+        
+        Returns:
+            True if successfully switched to editor frame
+        """
+        try:
+            # 먼저 기본 컨텍스트로
+            self.driver.switch_to.default_content()
+            
+            # mainFrame으로 전환 시도
+            try:
+                # 방법 1: name으로 찾기
+                self.driver.switch_to.frame("mainFrame")
+                logger.info("Switched to mainFrame by name")
+                return True
+            except Exception:
+                pass
+            
+            try:
+                # 방법 2: id로 찾기
+                self.driver.switch_to.default_content()
+                iframe = self.driver.find_element(By.ID, "mainFrame")
+                self.driver.switch_to.frame(iframe)
+                logger.info("Switched to mainFrame by ID")
+                return True
+            except Exception:
+                pass
+            
+            try:
+                # 방법 3: CSS 셀렉터로 찾기
+                self.driver.switch_to.default_content()
+                iframe = self.driver.find_element(By.CSS_SELECTOR, "iframe#mainFrame, iframe[name='mainFrame']")
+                self.driver.switch_to.frame(iframe)
+                logger.info("Switched to mainFrame by CSS selector")
+                return True
+            except Exception:
+                pass
+            
+            try:
+                # 방법 4: 첫 번째 iframe으로 시도
+                self.driver.switch_to.default_content()
+                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                if iframes:
+                    self.driver.switch_to.frame(iframes[0])
+                    logger.info("Switched to first iframe")
+                    return True
+            except Exception:
+                pass
+            
+            logger.warning("Could not switch to editor frame")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error switching to editor frame: {e}")
+            return False
+
     def _wait_for_editor_elements(self) -> bool:
         """
         에디터 요소가 실제로 로드될 때까지 대기
@@ -283,54 +343,27 @@ class NaverBlogBot:
         Returns:
             True if editor elements found, False otherwise
         """
-        # 에디터 요소를 찾기 위한 셀렉터 목록
         editor_selectors = [
-            ".se-section-documentTitle",  # 제목 섹션
-            ".se-title-text",              # 제목 텍스트
-            ".se-section-text",            # 본문 섹션
-            "p.se-text-paragraph",         # 텍스트 단락
-            ".se-module-text",             # 텍스트 모듈
-            ".se-placeholder",             # placeholder
-            "[class*='se-']",              # se- 클래스가 있는 요소
+            ".se-section-documentTitle",
+            ".se-section-text",
+            ".se-placeholder",
         ]
         
-        max_attempts = 15  # 최대 15회 시도 (1초 간격 = 15초)
+        max_attempts = 10
         
         for attempt in range(max_attempts):
             try:
-                # 기본 컨텍스트로 전환
-                self.driver.switch_to.default_content()
-                
-                # 각 셀렉터로 요소 존재 확인
-                for selector in editor_selectors:
-                    try:
-                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                        if elements:
-                            logger.info(f"Found editor element with selector: {selector} (count: {len(elements)})")
-                            return True
-                    except Exception:
-                        pass
-                
-                # iframe 내부 확인
-                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
-                logger.debug(f"Found {len(iframes)} iframes on attempt {attempt + 1}")
-                
-                for iframe in iframes:
-                    try:
-                        self.driver.switch_to.frame(iframe)
-                        for selector in editor_selectors:
-                            try:
-                                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                                if elements:
-                                    logger.info(f"Found editor element in iframe with selector: {selector}")
-                                    self.driver.switch_to.default_content()
-                                    return True
-                            except Exception:
-                                pass
-                        self.driver.switch_to.default_content()
-                    except Exception as e:
-                        logger.debug(f"Failed to switch to iframe: {e}")
-                        self.driver.switch_to.default_content()
+                # mainFrame으로 전환
+                if self._switch_to_editor_frame():
+                    # 에디터 요소 확인
+                    for selector in editor_selectors:
+                        try:
+                            elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                            if elements:
+                                logger.info(f"Found editor element: {selector} (count: {len(elements)})")
+                                return True
+                        except Exception:
+                            pass
                 
                 logger.debug(f"Editor elements not found on attempt {attempt + 1}/{max_attempts}")
                 time.sleep(1)
@@ -348,8 +381,8 @@ class NaverBlogBot:
         취소 버튼을 클릭하여 새 글 작성
         """
         try:
-            # 기본 컨텍스트로 전환
-            self.driver.switch_to.default_content()
+            # mainFrame으로 전환 (팝업도 iframe 안에 있을 수 있음)
+            self._switch_to_editor_frame()
             
             # 팝업이 나타날 때까지 잠시 대기
             cancel_btn = WebDriverWait(self.driver, 5).until(
@@ -370,11 +403,11 @@ class NaverBlogBot:
     def _close_help_panel(self):
         """
         도움말 패널이 있으면 닫기
-        여러 방법으로 시도
+        여러 방법으로 시도 (mainFrame 안에서)
         """
         try:
-            # iframe 안에 있을 수 있으므로 먼저 기본 컨텍스트로 전환
-            self.driver.switch_to.default_content()
+            # mainFrame으로 전환
+            self._switch_to_editor_frame()
             
             # 방법 1: CSS 셀렉터로 닫기 버튼 찾기
             help_close_btn = WebDriverWait(self.driver, 3).until(
@@ -393,27 +426,7 @@ class NaverBlogBot:
             logger.debug(f"Help panel close attempt 1: {e}")
         
         try:
-            # 방법 2: 도움말 컨테이너 내 닫기 버튼 찾기
-            help_container = self.driver.find_element(
-                By.CSS_SELECTOR, 
-                "div.se-help-container"
-            )
-            if help_container:
-                close_btn = help_container.find_element(
-                    By.CSS_SELECTOR,
-                    "button.se-help-panel-close-button"
-                )
-                close_btn.click()
-                logger.info("Closed help panel (container method)")
-                time.sleep(0.5)
-                return
-        except NoSuchElementException:
-            pass
-        except Exception as e:
-            logger.debug(f"Help panel close attempt 2: {e}")
-        
-        try:
-            # 방법 3: JavaScript로 닫기 버튼 클릭
+            # 방법 2: JavaScript로 닫기 버튼 클릭
             self.driver.execute_script("""
                 var closeBtn = document.querySelector('button.se-help-panel-close-button');
                 if (closeBtn) {
@@ -426,10 +439,10 @@ class NaverBlogBot:
             time.sleep(0.5)
             return
         except Exception as e:
-            logger.debug(f"Help panel close attempt 3: {e}")
+            logger.debug(f"Help panel close attempt 2: {e}")
         
         try:
-            # 방법 4: 도움말 패널 자체를 숨기기
+            # 방법 3: 도움말 패널 자체를 숨기기
             self.driver.execute_script("""
                 var helpContainer = document.querySelector('div.se-help-container');
                 if (helpContainer) {
@@ -441,9 +454,8 @@ class NaverBlogBot:
             logger.info("Hidden help panel (JavaScript hide)")
             time.sleep(0.5)
         except Exception as e:
-            logger.debug(f"Help panel close attempt 4: {e}")
+            logger.debug(f"Help panel close attempt 3: {e}")
         
-        # 도움말 패널이 없으면 정상 진행
         logger.info("No help panel found or already closed")
 
     def _log_editor_state(self):
@@ -495,8 +507,9 @@ class NaverBlogBot:
         try:
             logger.info("Writing content...")
             
-            # 기본 컨텍스트로 전환
-            self.driver.switch_to.default_content()
+            # mainFrame으로 전환
+            if not self._switch_to_editor_frame():
+                return False, "Failed to switch to editor frame"
             
             # 먼저 도움말 패널 닫기 (혹시 남아있으면)
             self._close_help_panel()
@@ -546,8 +559,8 @@ class NaverBlogBot:
         try:
             logger.info("Inputting title...")
             
-            # 기본 컨텍스트로 전환
-            self.driver.switch_to.default_content()
+            # mainFrame으로 전환
+            self._switch_to_editor_frame()
             
             # 방법 1: 제목 placeholder 클릭 (실제 구조: se-section-documentTitle 내의 se-placeholder)
             try:
@@ -678,8 +691,8 @@ class NaverBlogBot:
         try:
             logger.info("Inputting content...")
             
-            # 기본 컨텍스트로 전환
-            self.driver.switch_to.default_content()
+            # mainFrame으로 전환
+            self._switch_to_editor_frame()
             
             # 방법 1: 본문 placeholder 클릭 (실제 구조: se-section-text 내의 se-placeholder)
             try:
@@ -832,8 +845,8 @@ class NaverBlogBot:
         try:
             logger.info("Publishing post...")
             
-            # 기본 컨텍스트로 전환
-            self.driver.switch_to.default_content()
+            # mainFrame으로 전환 (발행 버튼도 iframe 안에 있을 수 있음)
+            self._switch_to_editor_frame()
             
             # Step 1: 발행 버튼 클릭 (상단 발행 버튼)
             publish_btn = self.wait.until(
