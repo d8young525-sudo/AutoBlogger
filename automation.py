@@ -1,10 +1,10 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.6.0: mainFrame iframe 진입 로직 추가
-- 에디터가 #mainFrame iframe 안에 있음 확인
-- switch_to.frame("mainFrame") 으로 iframe 전환 후 요소 조작
-- 모든 입력/발행 메서드에 iframe 전환 로직 추가
+v3.6.1: iframe 전환 및 Chrome 팝업 차단 개선
+- Chrome 비밀번호 저장 팝업 비활성화
+- iframe 전환 로그 강화
+- write_content 호출 확인
 """
 import time
 import logging
@@ -74,6 +74,14 @@ class NaverBlogBot:
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
+            
+            # 비밀번호 저장 팝업 비활성화
+            prefs = {
+                "credentials_enable_service": False,
+                "profile.password_manager_enabled": False,
+                "profile.default_content_setting_values.notifications": 2,  # 알림 차단
+            }
+            options.add_experimental_option("prefs", prefs)
             
             # Keep browser open after script ends (for debugging)
             if not self.headless:
@@ -239,18 +247,12 @@ class NaverBlogBot:
             
             # Step 2: 글쓰기 에디터로 직접 이동 (GoBlogWrite.naver)
             self.driver.get("https://blog.naver.com/GoBlogWrite.naver")
+            logger.info("Navigated to GoBlogWrite.naver, waiting for page load...")
             time.sleep(5)  # 에디터 로드 대기 시간 늘림
             
-            # Step 3: "작성 중인 글이 있습니다" 팝업 처리 (있으면)
-            self._handle_draft_popup()
-            
-            # Step 4: 도움말 패널 닫기 (있으면)
-            self._close_help_panel()
-            time.sleep(2)
-            
-            # Step 5: URL 확인
+            # Step 3: URL 확인
             current_url = self.driver.current_url
-            logger.info(f"Current URL after navigation: {current_url}")
+            logger.info(f"Current URL: {current_url}")
             
             # 로그인 페이지로 리다이렉트 됐는지 확인
             if "nidlogin" in current_url or "nid.naver.com" in current_url:
@@ -260,17 +262,16 @@ class NaverBlogBot:
             if "blog.naver.com" not in current_url:
                 return False, f"Unexpected URL: {current_url}"
             
-            # Step 6: 실제 에디터 요소가 로드될 때까지 대기
-            logger.info("Waiting for editor elements to load...")
-            editor_loaded = self._wait_for_editor_elements()
+            # Step 4: mainFrame으로 전환
+            logger.info("Attempting to switch to mainFrame...")
+            if not self._switch_to_editor_frame():
+                logger.warning("Could not switch to mainFrame, but continuing...")
             
-            if editor_loaded:
-                logger.info("Editor elements loaded successfully")
-                return True, "Editor loaded"
-            else:
-                # 요소를 못 찾아도 URL이 맞으면 진행 (디버깅용)
-                logger.warning("Editor elements not found, but URL is correct. Proceeding anyway.")
-                return True, "Editor loaded (URL only)"
+            # Step 5: 팝업 처리 (간소화)
+            self._handle_popups()
+            
+            logger.info("Editor page ready")
+            return True, "Editor loaded"
             
         except Exception as e:
             logger.error(f"Failed to load editor: {e}")
@@ -295,8 +296,8 @@ class NaverBlogBot:
                 self.driver.switch_to.frame("mainFrame")
                 logger.info("Switched to mainFrame by name")
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Switch by name failed: {e}")
             
             try:
                 # 방법 2: id로 찾기
@@ -305,8 +306,8 @@ class NaverBlogBot:
                 self.driver.switch_to.frame(iframe)
                 logger.info("Switched to mainFrame by ID")
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Switch by ID failed: {e}")
             
             try:
                 # 방법 3: CSS 셀렉터로 찾기
@@ -315,180 +316,61 @@ class NaverBlogBot:
                 self.driver.switch_to.frame(iframe)
                 logger.info("Switched to mainFrame by CSS selector")
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Switch by CSS failed: {e}")
             
             try:
                 # 방법 4: 첫 번째 iframe으로 시도
                 self.driver.switch_to.default_content()
                 iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                logger.info(f"Found {len(iframes)} iframes")
                 if iframes:
                     self.driver.switch_to.frame(iframes[0])
                     logger.info("Switched to first iframe")
                     return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Switch to first iframe failed: {e}")
             
-            logger.warning("Could not switch to editor frame")
+            logger.warning("Could not switch to any editor frame")
             return False
             
         except Exception as e:
             logger.error(f"Error switching to editor frame: {e}")
             return False
 
-    def _wait_for_editor_elements(self) -> bool:
-        """
-        에디터 요소가 실제로 로드될 때까지 대기
-        
-        Returns:
-            True if editor elements found, False otherwise
-        """
-        editor_selectors = [
-            ".se-section-documentTitle",
-            ".se-section-text",
-            ".se-placeholder",
-        ]
-        
-        max_attempts = 10
-        
-        for attempt in range(max_attempts):
-            try:
-                # mainFrame으로 전환
-                if self._switch_to_editor_frame():
-                    # 에디터 요소 확인
-                    for selector in editor_selectors:
-                        try:
-                            elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                            if elements:
-                                logger.info(f"Found editor element: {selector} (count: {len(elements)})")
-                                return True
-                        except Exception:
-                            pass
-                
-                logger.debug(f"Editor elements not found on attempt {attempt + 1}/{max_attempts}")
-                time.sleep(1)
-                
-            except Exception as e:
-                logger.debug(f"Error checking editor elements: {e}")
-                time.sleep(1)
-        
-        logger.warning("Editor elements not found after all attempts")
-        return False
-
-    def _handle_draft_popup(self):
-        """
-        "작성 중인 글이 있습니다" 팝업 처리
-        취소 버튼을 클릭하여 새 글 작성
-        """
+    def _handle_popups(self):
+        """팝업들 처리 (드래프트 팝업, 도움말 패널 등)"""
+        # 드래프트 팝업 처리
         try:
-            # mainFrame으로 전환 (팝업도 iframe 안에 있을 수 있음)
-            self._switch_to_editor_frame()
-            
-            # 팝업이 나타날 때까지 잠시 대기
-            cancel_btn = WebDriverWait(self.driver, 5).until(
+            cancel_btn = WebDriverWait(self.driver, 3).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR, 
                     "button.se-popup-button-cancel"
                 ))
             )
             cancel_btn.click()
-            logger.info("Closed draft popup - starting fresh")
-            time.sleep(1)
+            logger.info("Closed draft popup")
+            time.sleep(0.5)
         except TimeoutException:
-            # 팝업이 없으면 정상 진행
-            logger.info("No draft popup found")
+            logger.info("No draft popup")
         except Exception as e:
-            logger.warning(f"Draft popup handling: {e}")
-
-    def _close_help_panel(self):
-        """
-        도움말 패널이 있으면 닫기
-        여러 방법으로 시도 (mainFrame 안에서)
-        """
+            logger.debug(f"Draft popup: {e}")
+        
+        # 도움말 패널 처리
         try:
-            # mainFrame으로 전환
-            self._switch_to_editor_frame()
-            
-            # 방법 1: CSS 셀렉터로 닫기 버튼 찾기
-            help_close_btn = WebDriverWait(self.driver, 3).until(
+            help_close_btn = WebDriverWait(self.driver, 2).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR, 
                     "button.se-help-panel-close-button"
                 ))
             )
             help_close_btn.click()
-            logger.info("Closed help panel (CSS selector)")
+            logger.info("Closed help panel")
             time.sleep(0.5)
-            return
         except TimeoutException:
-            pass
+            logger.info("No help panel")
         except Exception as e:
-            logger.debug(f"Help panel close attempt 1: {e}")
-        
-        try:
-            # 방법 2: JavaScript로 닫기 버튼 클릭
-            self.driver.execute_script("""
-                var closeBtn = document.querySelector('button.se-help-panel-close-button');
-                if (closeBtn) {
-                    closeBtn.click();
-                    return true;
-                }
-                return false;
-            """)
-            logger.info("Closed help panel (JavaScript)")
-            time.sleep(0.5)
-            return
-        except Exception as e:
-            logger.debug(f"Help panel close attempt 2: {e}")
-        
-        try:
-            # 방법 3: 도움말 패널 자체를 숨기기
-            self.driver.execute_script("""
-                var helpContainer = document.querySelector('div.se-help-container');
-                if (helpContainer) {
-                    helpContainer.style.display = 'none';
-                    return true;
-                }
-                return false;
-            """)
-            logger.info("Hidden help panel (JavaScript hide)")
-            time.sleep(0.5)
-        except Exception as e:
-            logger.debug(f"Help panel close attempt 3: {e}")
-        
-        logger.info("No help panel found or already closed")
-
-    def _log_editor_state(self):
-        """디버깅용: 현재 에디터 상태 로깅"""
-        try:
-            self.driver.switch_to.default_content()
-            
-            # 현재 URL
-            logger.info(f"[DEBUG] Current URL: {self.driver.current_url}")
-            
-            # iframe 개수
-            iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
-            logger.info(f"[DEBUG] Number of iframes: {len(iframes)}")
-            
-            # 에디터 관련 요소 존재 여부
-            selectors_to_check = [
-                (".se-section-documentTitle", "제목 섹션"),
-                (".se-section-text", "본문 섹션"),
-                (".se-placeholder", "placeholder"),
-                ("p.se-text-paragraph", "텍스트 단락"),
-            ]
-            
-            for selector, name in selectors_to_check:
-                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                logger.info(f"[DEBUG] {name} ({selector}): {len(elements)} found")
-            
-            # body 내용 일부 (처음 500자)
-            body = self.driver.find_element(By.TAG_NAME, "body")
-            body_text = body.text[:500] if body.text else "(empty)"
-            logger.info(f"[DEBUG] Body text preview: {body_text[:200]}...")
-            
-        except Exception as e:
-            logger.error(f"[DEBUG] Failed to log editor state: {e}")
+            logger.debug(f"Help panel: {e}")
 
     def write_content(self, title: str, content: str) -> Tuple[bool, str]:
         """
@@ -505,65 +387,71 @@ class NaverBlogBot:
             return False, "Browser not started"
             
         try:
-            logger.info("Writing content...")
+            logger.info("=== write_content() 시작 ===")
             
             # mainFrame으로 전환
+            logger.info("Switching to mainFrame for writing...")
             if not self._switch_to_editor_frame():
+                logger.error("Failed to switch to mainFrame")
                 return False, "Failed to switch to editor frame"
             
-            # 먼저 도움말 패널 닫기 (혹시 남아있으면)
-            self._close_help_panel()
-            time.sleep(1)
-            
-            # 에디터 요소 확인 및 로깅
+            # 에디터 요소 확인
+            logger.info("Checking for editor elements...")
             self._log_editor_state()
             
             # Step 1: 제목 입력
+            logger.info(f"Inputting title: {title[:30]}...")
             title_success = self._input_title(title)
             if not title_success:
+                logger.error("Title input failed")
                 return False, "Failed to input title"
+            logger.info("Title input SUCCESS")
             
             time.sleep(1)
             
             # Step 2: 본문 입력
+            logger.info(f"Inputting content ({len(content)} chars)...")
             content_success = self._input_content(content)
             if not content_success:
+                logger.error("Content input failed")
                 return False, "Failed to input content"
+            logger.info("Content input SUCCESS")
             
             time.sleep(2)
             
-            logger.info("Content written successfully")
+            logger.info("=== write_content() 완료 ===")
             return True, "Content written"
             
-        except TimeoutException:
-            return False, "Content area not found"
-        except NoSuchElementException:
-            return False, "Editor elements not found"
         except Exception as e:
-            logger.error(f"Failed to write content: {e}")
+            logger.error(f"write_content error: {e}")
             return False, f"Write error: {str(e)}"
 
-    def _input_title(self, title: str) -> bool:
-        """
-        제목 입력
-        
-        네이버 에디터 제목 영역 실제 구조:
-        <div class="se-section se-section-documentTitle ...">
-            <div class="se-module se-module-text ... se-title-text ...">
-                <p class="se-text-paragraph ...">
-                    <span class="se-placeholder __se_placeholder se-fs32">제목</span>
-                </p>
-            </div>
-        </div>
-        """
+    def _log_editor_state(self):
+        """디버깅용: 현재 에디터 상태 로깅"""
         try:
-            logger.info("Inputting title...")
+            # 에디터 관련 요소 존재 여부
+            selectors_to_check = [
+                (".se-section-documentTitle", "제목 섹션"),
+                (".se-section-text", "본문 섹션"),
+                (".se-placeholder", "placeholder"),
+            ]
             
-            # mainFrame으로 전환
-            self._switch_to_editor_frame()
+            for selector, name in selectors_to_check:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    logger.info(f"  {name}: {len(elements)} found")
+                except:
+                    logger.info(f"  {name}: error")
             
-            # 방법 1: 제목 placeholder 클릭 (실제 구조: se-section-documentTitle 내의 se-placeholder)
+        except Exception as e:
+            logger.error(f"_log_editor_state error: {e}")
+
+    def _input_title(self, title: str) -> bool:
+        """제목 입력"""
+        try:
+            # 방법 1: placeholder 클릭
             try:
+                logger.info("  Trying placeholder method...")
                 title_placeholder = WebDriverWait(self.driver, 5).until(
                     EC.element_to_be_clickable((
                         By.CSS_SELECTOR,
@@ -573,20 +461,20 @@ class NaverBlogBot:
                 title_placeholder.click()
                 time.sleep(0.5)
                 
-                # 제목 입력
                 if PYPERCLIP_AVAILABLE:
                     pyperclip.copy(title)
                     ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
                 else:
                     ActionChains(self.driver).send_keys(title).perform()
                 
-                logger.info("Title input success (placeholder method)")
+                logger.info("  Title: placeholder method SUCCESS")
                 return True
             except Exception as e:
-                logger.debug(f"Title placeholder method failed: {e}")
+                logger.debug(f"  Title placeholder failed: {e}")
             
-            # 방법 2: 제목 영역의 p 태그 클릭 (실제 구조)
+            # 방법 2: p 태그 클릭
             try:
+                logger.info("  Trying paragraph method...")
                 title_para = self.driver.find_element(
                     By.CSS_SELECTOR,
                     ".se-section-documentTitle p.se-text-paragraph, .se-title-text p.se-text-paragraph"
@@ -600,28 +488,22 @@ class NaverBlogBot:
                 else:
                     ActionChains(self.driver).send_keys(title).perform()
                 
-                logger.info("Title input success (paragraph method)")
+                logger.info("  Title: paragraph method SUCCESS")
                 return True
             except Exception as e:
-                logger.debug(f"Title paragraph method failed: {e}")
+                logger.debug(f"  Title paragraph failed: {e}")
             
-            # 방법 3: JavaScript로 직접 입력 (실제 구조에 맞게)
+            # 방법 3: JavaScript
             try:
+                logger.info("  Trying JavaScript method...")
                 result = self.driver.execute_script("""
-                    // 제목 영역 찾기 (실제 구조: se-section-documentTitle 또는 se-title-text)
                     var titleArea = document.querySelector('.se-section-documentTitle p.se-text-paragraph') ||
                                    document.querySelector('.se-title-text p.se-text-paragraph');
                     if (titleArea) {
-                        // 클릭하여 포커스
                         titleArea.click();
-                        
-                        // placeholder 제거
                         var placeholder = titleArea.querySelector('span.se-placeholder');
-                        if (placeholder) {
-                            placeholder.style.display = 'none';
-                        }
+                        if (placeholder) placeholder.style.display = 'none';
                         
-                        // 기존 span 찾거나 새로 생성
                         var textSpan = titleArea.querySelector('span.__se-node');
                         if (!textSpan) {
                             textSpan = document.createElement('span');
@@ -629,30 +511,24 @@ class NaverBlogBot:
                             titleArea.appendChild(textSpan);
                         }
                         textSpan.textContent = arguments[0];
-                        
-                        // 입력 이벤트 발생
                         titleArea.dispatchEvent(new Event('input', {bubbles: true}));
-                        titleArea.dispatchEvent(new Event('change', {bubbles: true}));
-                        titleArea.dispatchEvent(new Event('keyup', {bubbles: true}));
                         return true;
                     }
                     return false;
                 """, title)
                 
                 if result:
-                    logger.info("Title input success (JavaScript method)")
+                    logger.info("  Title: JavaScript method SUCCESS")
                     return True
             except Exception as e:
-                logger.debug(f"Title JavaScript method failed: {e}")
+                logger.debug(f"  Title JavaScript failed: {e}")
             
-            # 방법 4: Tab 키로 제목 영역 이동 후 입력
+            # 방법 4: Tab 키
             try:
-                # 페이지 클릭 후 Tab으로 제목 영역 이동
+                logger.info("  Trying Tab method...")
                 body = self.driver.find_element(By.TAG_NAME, "body")
                 body.click()
                 time.sleep(0.3)
-                
-                # Tab 키로 제목으로 이동
                 ActionChains(self.driver).send_keys(Keys.TAB).perform()
                 time.sleep(0.3)
                 
@@ -662,64 +538,47 @@ class NaverBlogBot:
                 else:
                     ActionChains(self.driver).send_keys(title).perform()
                 
-                logger.info("Title input success (Tab method)")
+                logger.info("  Title: Tab method SUCCESS")
                 return True
             except Exception as e:
-                logger.debug(f"Title Tab method failed: {e}")
+                logger.debug(f"  Title Tab failed: {e}")
             
-            logger.error("All title input methods failed")
+            logger.error("All title methods failed")
             return False
             
         except Exception as e:
-            logger.error(f"Title input error: {e}")
+            logger.error(f"_input_title error: {e}")
             return False
 
     def _input_content(self, content: str) -> bool:
-        """
-        본문 입력
-        
-        네이버 에디터 본문 영역 실제 구조:
-        <div class="se-section se-section-text ...">  <!-- 본문은 se-section-text -->
-            <div class="se-module se-module-text __se-unit ...">
-                <p class="se-text-paragraph ...">
-                    <span class="__se-node se-fs15">...</span>
-                    <span class="se-placeholder __se_placeholder se-fs15">글감과 함께...</span>
-                </p>
-            </div>
-        </div>
-        """
+        """본문 입력"""
         try:
-            logger.info("Inputting content...")
-            
-            # mainFrame으로 전환
-            self._switch_to_editor_frame()
-            
-            # 방법 1: 본문 placeholder 클릭 (실제 구조: se-section-text 내의 se-placeholder)
+            # 방법 1: placeholder 클릭
             try:
+                logger.info("  Trying placeholder method...")
                 content_placeholder = WebDriverWait(self.driver, 5).until(
                     EC.element_to_be_clickable((
                         By.CSS_SELECTOR,
-                        ".se-section-text .se-placeholder, .se-section-text span.__se_placeholder"
+                        ".se-section-text .se-placeholder"
                     ))
                 )
                 content_placeholder.click()
                 time.sleep(0.5)
                 
-                # 본문 입력
                 if PYPERCLIP_AVAILABLE:
                     pyperclip.copy(content)
                     ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
                 else:
                     ActionChains(self.driver).send_keys(content).perform()
                 
-                logger.info("Content input success (placeholder method)")
+                logger.info("  Content: placeholder method SUCCESS")
                 return True
             except Exception as e:
-                logger.debug(f"Content placeholder method failed: {e}")
+                logger.debug(f"  Content placeholder failed: {e}")
             
-            # 방법 2: 본문 영역 직접 찾기 (se-section-text 내의 p 태그)
+            # 방법 2: p 태그 클릭
             try:
-                # se-section-text 내의 se-text-paragraph 찾기 (제목 영역 se-section-documentTitle 제외)
+                logger.info("  Trying paragraph method...")
                 content_para = self.driver.find_element(
                     By.CSS_SELECTOR,
                     ".se-section-text p.se-text-paragraph"
@@ -733,28 +592,21 @@ class NaverBlogBot:
                 else:
                     ActionChains(self.driver).send_keys(content).perform()
                 
-                logger.info("Content input success (paragraph method)")
+                logger.info("  Content: paragraph method SUCCESS")
                 return True
             except Exception as e:
-                logger.debug(f"Content paragraph method failed: {e}")
+                logger.debug(f"  Content paragraph failed: {e}")
             
-            # 방법 3: JavaScript로 직접 입력 (실제 구조: se-section-text)
+            # 방법 3: JavaScript
             try:
+                logger.info("  Trying JavaScript method...")
                 result = self.driver.execute_script("""
-                    // 본문 영역 찾기 (se-section-text 내의 p 태그)
                     var contentArea = document.querySelector('.se-section-text p.se-text-paragraph');
-                    
                     if (contentArea) {
-                        // 클릭하여 포커스
                         contentArea.click();
+                        var placeholder = contentArea.querySelector('span.se-placeholder');
+                        if (placeholder) placeholder.style.display = 'none';
                         
-                        // placeholder 숨기기
-                        var placeholder = contentArea.querySelector('span.se-placeholder, span.__se_placeholder');
-                        if (placeholder) {
-                            placeholder.style.display = 'none';
-                        }
-                        
-                        // 기존 __se-node span 찾거나 새로 생성
                         var textSpan = contentArea.querySelector('span.__se-node');
                         if (!textSpan) {
                             textSpan = document.createElement('span');
@@ -762,25 +614,21 @@ class NaverBlogBot:
                             contentArea.insertBefore(textSpan, contentArea.firstChild);
                         }
                         textSpan.textContent = arguments[0];
-                        
-                        // 이벤트 발생
                         contentArea.dispatchEvent(new Event('input', {bubbles: true}));
-                        contentArea.dispatchEvent(new Event('change', {bubbles: true}));
-                        contentArea.dispatchEvent(new Event('keyup', {bubbles: true}));
                         return true;
                     }
                     return false;
                 """, content)
                 
                 if result:
-                    logger.info("Content input success (JavaScript method)")
+                    logger.info("  Content: JavaScript method SUCCESS")
                     return True
             except Exception as e:
-                logger.debug(f"Content JavaScript method failed: {e}")
+                logger.debug(f"  Content JavaScript failed: {e}")
             
-            # 방법 4: Tab 키로 본문 영역 이동 후 입력
+            # 방법 4: Tab 키
             try:
-                # 제목 입력 후 Tab으로 본문으로 이동
+                logger.info("  Trying Tab method...")
                 ActionChains(self.driver).send_keys(Keys.TAB).perform()
                 time.sleep(0.3)
                 
@@ -790,37 +638,16 @@ class NaverBlogBot:
                 else:
                     ActionChains(self.driver).send_keys(content).perform()
                 
-                logger.info("Content input success (Tab method)")
+                logger.info("  Content: Tab method SUCCESS")
                 return True
             except Exception as e:
-                logger.debug(f"Content Tab method failed: {e}")
+                logger.debug(f"  Content Tab failed: {e}")
             
-            # 방법 5: 에디터 본문 영역 클릭 후 입력
-            try:
-                # 에디터 메인 영역 클릭
-                editor_main = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "div.se-content, div[class*='editor-content'], main.se-viewer"
-                )
-                editor_main.click()
-                time.sleep(0.5)
-                
-                if PYPERCLIP_AVAILABLE:
-                    pyperclip.copy(content)
-                    ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
-                else:
-                    ActionChains(self.driver).send_keys(content).perform()
-                
-                logger.info("Content input success (editor area method)")
-                return True
-            except Exception as e:
-                logger.debug(f"Content editor area method failed: {e}")
-            
-            logger.error("All content input methods failed")
+            logger.error("All content methods failed")
             return False
             
         except Exception as e:
-            logger.error(f"Content input error: {e}")
+            logger.error(f"_input_content error: {e}")
             return False
 
     def publish_post(self, category: str = "") -> Tuple[bool, str]:
@@ -829,26 +656,19 @@ class NaverBlogBot:
         
         Args:
             category: 발행할 카테고리명 (선택사항)
-        
-        플로우:
-        1. 발행 버튼 클릭
-        2. 카테고리 선택 (있으면)
-        3. 즉시 발행 선택
-        4. 최종 발행 버튼 클릭
         """
         if not self.driver:
             return False, "Browser not started"
         
-        # 카테고리 설정 (인자로 전달되거나, 미리 설정된 값 사용)
         target_category = category or self.category
             
         try:
             logger.info("Publishing post...")
             
-            # mainFrame으로 전환 (발행 버튼도 iframe 안에 있을 수 있음)
+            # mainFrame 안에서 발행
             self._switch_to_editor_frame()
             
-            # Step 1: 발행 버튼 클릭 (상단 발행 버튼)
+            # Step 1: 발행 버튼 클릭
             publish_btn = self.wait.until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR, 
@@ -858,32 +678,25 @@ class NaverBlogBot:
             publish_btn.click()
             time.sleep(1.5)
             
-            # Step 2: 카테고리 선택 (설정된 카테고리가 있으면)
+            # Step 2: 카테고리 선택
             if target_category:
                 self._select_category(target_category)
             
-            # Step 3: 즉시 발행 선택
+            # Step 3: 즉시 발행
             try:
-                # 현재 라디오 버튼 클릭
                 immediate_radio = self.driver.find_element(
                     By.CSS_SELECTOR,
                     "label[for='radio_time1'], input#radio_time1"
                 )
                 immediate_radio.click()
                 time.sleep(0.5)
-            except Exception as e:
-                logger.warning(f"Could not click immediate publish radio: {e}")
-                # JavaScript로 시도
+            except:
                 try:
-                    self.driver.execute_script(
-                        "document.getElementById('radio_time1').click();"
-                    )
+                    self.driver.execute_script("document.getElementById('radio_time1').click();")
                 except:
                     pass
             
-            time.sleep(0.5)
-            
-            # Step 4: 최종 발행 버튼 클릭
+            # Step 4: 최종 발행
             final_btn = self.wait.until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR, 
@@ -903,16 +716,10 @@ class NaverBlogBot:
             return False, f"Publish error: {str(e)}"
 
     def _select_category(self, category_name: str):
-        """
-        카테고리 선택
-        
-        Args:
-            category_name: 선택할 카테고리명
-        """
+        """카테고리 선택"""
         try:
             logger.info(f"Selecting category: {category_name}")
             
-            # Step 1: 카테고리 드롭다운 버튼 클릭
             category_btn = WebDriverWait(self.driver, 5).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR,
@@ -922,41 +729,21 @@ class NaverBlogBot:
             category_btn.click()
             time.sleep(1)
             
-            # Step 2: 카테고리 목록에서 해당 카테고리 찾아서 클릭
-            try:
-                # data-testid로 카테고리 항목 찾기
-                category_items = self.driver.find_elements(
-                    By.CSS_SELECTOR,
-                    "span.text__sraQE[data-testid^='categoryItemText']"
-                )
-                
-                for item in category_items:
-                    item_text = item.text.strip()
-                    # 카테고리명 비교 (비공개 아이콘 등 제외하고 텍스트만)
-                    if category_name in item_text or item_text in category_name:
-                        # 해당 카테고리의 label 클릭
-                        parent = item.find_element(By.XPATH, "./ancestor::label")
-                        parent.click()
-                        logger.info(f"Selected category: {item_text}")
-                        time.sleep(0.5)
-                        return
-                
-                # 정확히 일치하는 것 없으면 부분 일치 시도
-                for item in category_items:
-                    if category_name.lower() in item.text.lower():
-                        parent = item.find_element(By.XPATH, "./ancestor::label")
-                        parent.click()
-                        logger.info(f"Selected category (partial match): {item.text}")
-                        time.sleep(0.5)
-                        return
+            category_items = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "span.text__sraQE[data-testid^='categoryItemText']"
+            )
+            
+            for item in category_items:
+                if category_name in item.text or item.text in category_name:
+                    parent = item.find_element(By.XPATH, "./ancestor::label")
+                    parent.click()
+                    logger.info(f"Selected category: {item.text}")
+                    time.sleep(0.5)
+                    return
                         
-                logger.warning(f"Category '{category_name}' not found in list")
+            logger.warning(f"Category '{category_name}' not found")
                 
-            except Exception as e:
-                logger.warning(f"Category selection error: {e}")
-                
-        except TimeoutException:
-            logger.warning("Category dropdown not found")
         except Exception as e:
             logger.warning(f"Category selection failed: {e}")
 
