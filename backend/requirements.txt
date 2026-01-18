@@ -1,4 +1,0 @@
-# Backend 의존성 (Cloud Functions용)
-firebase-functions
-firebase-admin
-google-generativeai
