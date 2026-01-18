@@ -1,7 +1,10 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.5.4: 글쓰기 에디터 제목/본문 입력 개선, 도움말 패널 처리 강화
+v3.5.9: 에디터 로드 대기 및 입력 로직 대폭 개선
+- iframe 처리 추가
+- 실제 요소 대기 로직 강화
+- 디버깅 로그 추가
 """
 import time
 import logging
@@ -245,31 +248,99 @@ class NaverBlogBot:
             self._close_help_panel()
             time.sleep(2)
             
-            # Step 5: 에디터 진입 성공 - URL 기반으로 단순 확인
+            # Step 5: URL 확인
             current_url = self.driver.current_url
             logger.info(f"Current URL after navigation: {current_url}")
             
-            # GoBlogWrite 호출 후 리다이렉트된 URL 패턴들
-            # - https://blog.naver.com/아이디?Redirect=Write&
-            # - https://blog.naver.com/PostWriteForm.naver
-            # - https://blog.naver.com/GoBlogWrite.naver (리다이렉트 안 된 경우)
+            # 로그인 페이지로 리다이렉트 됐는지 확인
+            if "nidlogin" in current_url or "nid.naver.com" in current_url:
+                logger.error("Redirected to login page - session may have expired")
+                return False, "로그인 세션 만료"
             
-            # 글쓰기 페이지면 무조건 성공 처리
-            if "blog.naver.com" in current_url:
-                # 로그인 페이지로 리다이렉트 됐는지 확인
-                if "nidlogin" in current_url or "nid.naver.com" in current_url:
-                    logger.error("Redirected to login page - session may have expired")
-                    return False, "로그인 세션 만료"
-                
-                # 그 외에는 에디터 페이지로 간주
-                logger.info("Editor page loaded successfully")
+            if "blog.naver.com" not in current_url:
+                return False, f"Unexpected URL: {current_url}"
+            
+            # Step 6: 실제 에디터 요소가 로드될 때까지 대기
+            logger.info("Waiting for editor elements to load...")
+            editor_loaded = self._wait_for_editor_elements()
+            
+            if editor_loaded:
+                logger.info("Editor elements loaded successfully")
                 return True, "Editor loaded"
-            
-            return False, f"Unexpected URL: {current_url}"
+            else:
+                # 요소를 못 찾아도 URL이 맞으면 진행 (디버깅용)
+                logger.warning("Editor elements not found, but URL is correct. Proceeding anyway.")
+                return True, "Editor loaded (URL only)"
             
         except Exception as e:
             logger.error(f"Failed to load editor: {e}")
             return False, f"Editor error: {str(e)}"
+
+    def _wait_for_editor_elements(self) -> bool:
+        """
+        에디터 요소가 실제로 로드될 때까지 대기
+        
+        Returns:
+            True if editor elements found, False otherwise
+        """
+        # 에디터 요소를 찾기 위한 셀렉터 목록
+        editor_selectors = [
+            ".se-section-documentTitle",  # 제목 섹션
+            ".se-title-text",              # 제목 텍스트
+            ".se-section-text",            # 본문 섹션
+            "p.se-text-paragraph",         # 텍스트 단락
+            ".se-module-text",             # 텍스트 모듈
+            ".se-placeholder",             # placeholder
+            "[class*='se-']",              # se- 클래스가 있는 요소
+        ]
+        
+        max_attempts = 15  # 최대 15회 시도 (1초 간격 = 15초)
+        
+        for attempt in range(max_attempts):
+            try:
+                # 기본 컨텍스트로 전환
+                self.driver.switch_to.default_content()
+                
+                # 각 셀렉터로 요소 존재 확인
+                for selector in editor_selectors:
+                    try:
+                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        if elements:
+                            logger.info(f"Found editor element with selector: {selector} (count: {len(elements)})")
+                            return True
+                    except Exception:
+                        pass
+                
+                # iframe 내부 확인
+                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                logger.debug(f"Found {len(iframes)} iframes on attempt {attempt + 1}")
+                
+                for iframe in iframes:
+                    try:
+                        self.driver.switch_to.frame(iframe)
+                        for selector in editor_selectors:
+                            try:
+                                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                                if elements:
+                                    logger.info(f"Found editor element in iframe with selector: {selector}")
+                                    self.driver.switch_to.default_content()
+                                    return True
+                            except Exception:
+                                pass
+                        self.driver.switch_to.default_content()
+                    except Exception as e:
+                        logger.debug(f"Failed to switch to iframe: {e}")
+                        self.driver.switch_to.default_content()
+                
+                logger.debug(f"Editor elements not found on attempt {attempt + 1}/{max_attempts}")
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.debug(f"Error checking editor elements: {e}")
+                time.sleep(1)
+        
+        logger.warning("Editor elements not found after all attempts")
+        return False
 
     def _handle_draft_popup(self):
         """
@@ -277,6 +348,9 @@ class NaverBlogBot:
         취소 버튼을 클릭하여 새 글 작성
         """
         try:
+            # 기본 컨텍스트로 전환
+            self.driver.switch_to.default_content()
+            
             # 팝업이 나타날 때까지 잠시 대기
             cancel_btn = WebDriverWait(self.driver, 5).until(
                 EC.element_to_be_clickable((
@@ -299,6 +373,9 @@ class NaverBlogBot:
         여러 방법으로 시도
         """
         try:
+            # iframe 안에 있을 수 있으므로 먼저 기본 컨텍스트로 전환
+            self.driver.switch_to.default_content()
+            
             # 방법 1: CSS 셀렉터로 닫기 버튼 찾기
             help_close_btn = WebDriverWait(self.driver, 3).until(
                 EC.element_to_be_clickable((
@@ -369,6 +446,38 @@ class NaverBlogBot:
         # 도움말 패널이 없으면 정상 진행
         logger.info("No help panel found or already closed")
 
+    def _log_editor_state(self):
+        """디버깅용: 현재 에디터 상태 로깅"""
+        try:
+            self.driver.switch_to.default_content()
+            
+            # 현재 URL
+            logger.info(f"[DEBUG] Current URL: {self.driver.current_url}")
+            
+            # iframe 개수
+            iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+            logger.info(f"[DEBUG] Number of iframes: {len(iframes)}")
+            
+            # 에디터 관련 요소 존재 여부
+            selectors_to_check = [
+                (".se-section-documentTitle", "제목 섹션"),
+                (".se-section-text", "본문 섹션"),
+                (".se-placeholder", "placeholder"),
+                ("p.se-text-paragraph", "텍스트 단락"),
+            ]
+            
+            for selector, name in selectors_to_check:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                logger.info(f"[DEBUG] {name} ({selector}): {len(elements)} found")
+            
+            # body 내용 일부 (처음 500자)
+            body = self.driver.find_element(By.TAG_NAME, "body")
+            body_text = body.text[:500] if body.text else "(empty)"
+            logger.info(f"[DEBUG] Body text preview: {body_text[:200]}...")
+            
+        except Exception as e:
+            logger.error(f"[DEBUG] Failed to log editor state: {e}")
+
     def write_content(self, title: str, content: str) -> Tuple[bool, str]:
         """
         Write blog content
@@ -386,9 +495,15 @@ class NaverBlogBot:
         try:
             logger.info("Writing content...")
             
+            # 기본 컨텍스트로 전환
+            self.driver.switch_to.default_content()
+            
             # 먼저 도움말 패널 닫기 (혹시 남아있으면)
             self._close_help_panel()
             time.sleep(1)
+            
+            # 에디터 요소 확인 및 로깅
+            self._log_editor_state()
             
             # Step 1: 제목 입력
             title_success = self._input_title(title)
@@ -430,6 +545,9 @@ class NaverBlogBot:
         """
         try:
             logger.info("Inputting title...")
+            
+            # 기본 컨텍스트로 전환
+            self.driver.switch_to.default_content()
             
             # 방법 1: 제목 placeholder 클릭 (실제 구조: se-section-documentTitle 내의 se-placeholder)
             try:
@@ -559,6 +677,9 @@ class NaverBlogBot:
         """
         try:
             logger.info("Inputting content...")
+            
+            # 기본 컨텍스트로 전환
+            self.driver.switch_to.default_content()
             
             # 방법 1: 본문 placeholder 클릭 (실제 구조: se-section-text 내의 se-placeholder)
             try:
@@ -710,6 +831,9 @@ class NaverBlogBot:
             
         try:
             logger.info("Publishing post...")
+            
+            # 기본 컨텍스트로 전환
+            self.driver.switch_to.default_content()
             
             # Step 1: 발행 버튼 클릭 (상단 발행 버튼)
             publish_btn = self.wait.until(
