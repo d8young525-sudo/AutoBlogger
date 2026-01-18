@@ -555,11 +555,24 @@ class InfoTab(QWidget):
         questions = [self.list_questions.item(i).text() 
                      for i in range(self.list_questions.count()) 
                      if self.list_questions.item(i).checkState() == Qt.Checked]
+        
+        # 선택된 카테고리 가져오기 (글쓰기 환경설정 또는 현재 선택된 카테고리)
+        category = ""
+        if self.radio_use_category.isChecked():
+            # AI 추천 모드일 때는 선택된 카테고리 사용
+            category = self.combo_cat.currentText()
+        
+        # 글쓰기 환경설정의 발행 카테고리도 확인
+        if self.writing_settings_tab:
+            publish_category = self.writing_settings_tab.get_info_category()
+            if publish_category:
+                category = publish_category
 
         data = {
             "action": "generate",
             "mode": "info",
             "topic": topic,
+            "category": category,  # 카테고리 정보 추가
             "tone": tone,
             "length": length,
             "targets": targets,
@@ -640,20 +653,20 @@ class InfoTab(QWidget):
         """결과 뷰어 업데이트 - TEXT만 표시"""
         title = result_data.get("title", "제목 없음")
         
+        # 제목 정리 (앞뒤 따옴표, 마크다운 등 제거)
+        title = self._clean_title(title)
+        
         # content_text 우선, 없으면 content 사용
         content = result_data.get("content_text", "") or result_data.get("content", "")
         
-        # JSON 형태로 온 경우 정리
-        if content and content.strip().startswith("{"):
-            try:
-                import json
-                parsed = json.loads(content)
-                content = parsed.get("content_text", "") or parsed.get("content", content)
-            except:
-                pass
+        # JSON 형태로 온 경우 정리 (중첩된 JSON도 처리)
+        content = self._extract_content_from_json(content)
         
         # 마크다운/HTML 형식이 섞여 있으면 순수 텍스트로 정리
         content = self._clean_to_plain_text(content)
+        
+        # 최종 정리: 불필요한 공백/줄바꿈 정리
+        content = self._normalize_whitespace(content)
         
         # 생성된 본문 저장
         self.generated_content = content
@@ -671,6 +684,79 @@ class InfoTab(QWidget):
         self.btn_publish.setEnabled(True)
         
         self.log_signal.emit("✨ 글 생성 완료! 확인 후 발행할 수 있습니다.")
+    
+    def _clean_title(self, title: str) -> str:
+        """제목 정리"""
+        if not title:
+            return "제목 없음"
+        
+        # 앞뒤 따옴표 제거
+        title = title.strip().strip('"').strip("'")
+        
+        # 마크다운 헤딩 제거 (# 제목)
+        title = re.sub(r'^#+\s*', '', title)
+        
+        # JSON 키 표시 제거
+        title = re.sub(r'^title:\s*', '', title, flags=re.IGNORECASE)
+        
+        return title.strip()
+    
+    def _extract_content_from_json(self, content: str) -> str:
+        """JSON 형태의 콘텐츠에서 실제 텍스트 추출"""
+        if not content:
+            return content
+        
+        content = content.strip()
+        
+        # JSON 형태인지 확인
+        if content.startswith("{") or content.startswith("["):
+            try:
+                import json
+                parsed = json.loads(content)
+                
+                # 딕셔너리인 경우
+                if isinstance(parsed, dict):
+                    # 우선순위: content_text > content > body > text
+                    for key in ['content_text', 'content', 'body', 'text']:
+                        if key in parsed and parsed[key]:
+                            return str(parsed[key])
+                    
+                    # 첫 번째 문자열 값 반환
+                    for value in parsed.values():
+                        if isinstance(value, str) and len(value) > 50:
+                            return value
+                
+                # 리스트인 경우
+                elif isinstance(parsed, list) and parsed:
+                    if isinstance(parsed[0], str):
+                        return "\n".join(parsed)
+                    elif isinstance(parsed[0], dict):
+                        return self._extract_content_from_json(json.dumps(parsed[0]))
+                        
+            except (json.JSONDecodeError, TypeError):
+                pass
+        
+        return content
+    
+    def _normalize_whitespace(self, content: str) -> str:
+        """공백/줄바꿈 정리"""
+        if not content:
+            return content
+        
+        # 탭을 공백으로
+        content = content.replace('\t', ' ')
+        
+        # 연속된 공백을 하나로
+        content = re.sub(r' +', ' ', content)
+        
+        # 3줄 이상의 빈 줄을 2줄로
+        content = re.sub(r'\n{3,}', '\n\n', content)
+        
+        # 각 줄의 앞뒤 공백 제거
+        lines = [line.strip() for line in content.split('\n')]
+        content = '\n'.join(lines)
+        
+        return content.strip()
 
     def _clean_to_plain_text(self, content: str) -> str:
         """

@@ -1,10 +1,11 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.6.1: iframe 전환 및 Chrome 팝업 차단 개선
-- Chrome 비밀번호 저장 팝업 비활성화
-- iframe 전환 로그 강화
-- write_content 호출 확인
+v3.6.2: Chrome 비밀번호 팝업 완전 차단 및 에디터 안정화
+- Chrome 비밀번호/자동완성 팝업 완전 차단 (추가 옵션)
+- 사용자 데이터 디렉토리 지정으로 세션 유지
+- iframe 전환 안정화
+- 에디터 입력 로직 강화
 """
 import time
 import logging
@@ -75,13 +76,35 @@ class NaverBlogBot:
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
             
-            # 비밀번호 저장 팝업 비활성화
+            # 비밀번호 저장 팝업 완전 차단 (강화된 설정)
             prefs = {
+                # 비밀번호 관련 완전 비활성화
                 "credentials_enable_service": False,
                 "profile.password_manager_enabled": False,
-                "profile.default_content_setting_values.notifications": 2,  # 알림 차단
+                "profile.password_manager_leak_detection": False,
+                
+                # 자동완성 비활성화
+                "autofill.profile_enabled": False,
+                "autofill.address_enabled": False,
+                "autofill.credit_card_enabled": False,
+                
+                # 알림 및 팝업 차단
+                "profile.default_content_setting_values.notifications": 2,
+                "profile.default_content_setting_values.popups": 2,
+                
+                # 저장 프롬프트 비활성화
+                "profile.password_manager.auto_signin_enabled": False,
+                
+                # 번역 팝업 비활성화
+                "translate_enabled": False,
+                "translate.enabled": False,
             }
             options.add_experimental_option("prefs", prefs)
+            
+            # 추가 Chrome 플래그로 비밀번호 관리 비활성화
+            options.add_argument("--disable-save-password-bubble")
+            options.add_argument("--password-store=basic")
+            options.add_argument("--disable-infobars")
             
             # Keep browser open after script ends (for debugging)
             if not self.headless:
@@ -449,6 +472,57 @@ class NaverBlogBot:
     def _input_title(self, title: str) -> bool:
         """제목 입력"""
         try:
+            # 방법 0: 가장 안정적인 execCommand 방식 (먼저 시도)
+            try:
+                logger.info("  Trying execCommand method (most reliable)...")
+                result = self.driver.execute_script("""
+                    // 제목 영역 찾기
+                    var titleSection = document.querySelector('.se-section-documentTitle');
+                    if (!titleSection) {
+                        console.log('No title section found');
+                        return false;
+                    }
+                    
+                    // 편집 가능한 요소 찾기
+                    var editableArea = titleSection.querySelector('p.se-text-paragraph') ||
+                                       titleSection.querySelector('[contenteditable="true"]') ||
+                                       titleSection.querySelector('.se-title-text');
+                    
+                    if (!editableArea) {
+                        console.log('No editable area found');
+                        return false;
+                    }
+                    
+                    // 포커스
+                    editableArea.focus();
+                    editableArea.click();
+                    
+                    // placeholder 숨기기
+                    var placeholder = titleSection.querySelector('.se-placeholder');
+                    if (placeholder) {
+                        placeholder.style.display = 'none';
+                    }
+                    
+                    // 기존 텍스트 선택 및 삭제
+                    document.execCommand('selectAll', false, null);
+                    document.execCommand('delete', false, null);
+                    
+                    // 텍스트 삽입
+                    document.execCommand('insertText', false, arguments[0]);
+                    
+                    // 이벤트 발생
+                    editableArea.dispatchEvent(new Event('input', {bubbles: true}));
+                    editableArea.dispatchEvent(new Event('change', {bubbles: true}));
+                    
+                    return true;
+                """, title)
+                
+                if result:
+                    logger.info("  Title: execCommand method SUCCESS")
+                    return True
+            except Exception as e:
+                logger.debug(f"  Title execCommand failed: {e}")
+            
             # 방법 1: placeholder 클릭
             try:
                 logger.info("  Trying placeholder method...")
@@ -553,6 +627,56 @@ class NaverBlogBot:
     def _input_content(self, content: str) -> bool:
         """본문 입력"""
         try:
+            # 방법 0: 가장 안정적인 execCommand 방식 (먼저 시도)
+            try:
+                logger.info("  Trying execCommand method (most reliable)...")
+                result = self.driver.execute_script("""
+                    // 본문 영역 찾기
+                    var textSection = document.querySelector('.se-section-text');
+                    if (!textSection) {
+                        console.log('No text section found');
+                        return false;
+                    }
+                    
+                    // 편집 가능한 요소 찾기
+                    var editableArea = textSection.querySelector('p.se-text-paragraph') ||
+                                       textSection.querySelector('[contenteditable="true"]');
+                    
+                    if (!editableArea) {
+                        console.log('No editable area found');
+                        return false;
+                    }
+                    
+                    // 포커스
+                    editableArea.focus();
+                    editableArea.click();
+                    
+                    // placeholder 숨기기
+                    var placeholder = textSection.querySelector('.se-placeholder');
+                    if (placeholder) {
+                        placeholder.style.display = 'none';
+                    }
+                    
+                    // 기존 텍스트 선택 및 삭제
+                    document.execCommand('selectAll', false, null);
+                    document.execCommand('delete', false, null);
+                    
+                    // 텍스트 삽입
+                    document.execCommand('insertText', false, arguments[0]);
+                    
+                    // 이벤트 발생
+                    editableArea.dispatchEvent(new Event('input', {bubbles: true}));
+                    editableArea.dispatchEvent(new Event('change', {bubbles: true}));
+                    
+                    return true;
+                """, content)
+                
+                if result:
+                    logger.info("  Content: execCommand method SUCCESS")
+                    return True
+            except Exception as e:
+                logger.debug(f"  Content execCommand failed: {e}")
+            
             # 방법 1: placeholder 클릭
             try:
                 logger.info("  Trying placeholder method...")

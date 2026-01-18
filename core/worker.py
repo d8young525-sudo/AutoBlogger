@@ -100,7 +100,11 @@ class AutomationWorker(QThread):
             Generated content data or None on failure
         """
         topic = self.data.get('topic', '')
+        category = self.data.get('category', '') or self.settings.get('default_category', '')
+        
         self.log_signal.emit(f"🚀 AI 글 작성 요청 중... (주제: {topic})")
+        if category:
+            self.log_signal.emit(f"📁 카테고리: {category}")
         
         # Build emoji instruction
         emoji_level = self.data.get('emoji_level', '')
@@ -111,11 +115,15 @@ class AutomationWorker(QThread):
         else:
             emoji_inst = "이모지 사용 안 함"
 
-        # Build request payload
+        # Build request payload with category information
         prompt_payload = {
             "mode": "write",
             "topic": topic,
+            "category": category,  # 카테고리 정보 추가
             "prompt": f"""
+                [필수] 카테고리: {category}
+                [필수] 주제: {topic}
+                
                 타겟: {", ".join(self.data.get('targets', []))}
                 질문: {" / ".join(self.data.get('questions', []))}
                 요약: {self.data.get('summary', '')}
@@ -125,6 +133,12 @@ class AutomationWorker(QThread):
                 이모지: {emoji_inst}
                 인사말: {self.settings.get('intro', '')}
                 맺음말: {self.settings.get('outro', '')}
+                
+                [주의사항]
+                - 주제와 카테고리에 맞는 내용만 작성하세요
+                - 카테고리가 '차량 관리 상식'이면 차량 관리 관련 내용만
+                - 카테고리가 '교통법규/범칙금'이면 교통법규 관련 내용만
+                - 다른 카테고리의 내용을 섞지 마세요
             """,
             "style_options": str(self.data.get('style_options', {}))
         }
