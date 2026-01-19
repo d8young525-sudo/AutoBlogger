@@ -1,7 +1,7 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.6.0: iframe 없는 새 에디터 지원 - PostWriteForm.naver 호환
+v3.6.1: 발행 버튼이 iframe 안에 있음 - default_content 호출 제거
 """
 import time
 import logging
@@ -576,17 +576,10 @@ class NaverBlogBot:
             # Step 0: 도움말 패널 닫기 (발행 버튼을 가릴 수 있음)
             self._close_help_panel()
             
-            # Step 1: 메인 페이지로 전환 (구 에디터는 iframe 밖에 발행 버튼 있음)
-            if hasattr(self, '_has_iframe') and self._has_iframe:
-                try:
-                    self.driver.switch_to.default_content()
-                    logger.info("Switched to default content for publish (old editor)")
-                except:
-                    pass
-            else:
-                logger.info("New editor - publish button is directly accessible")
+            # 참고: 발행 버튼은 현재 frame 안에 있음 (default_content로 나가면 안 됨!)
+            logger.info("Publish button is inside current frame - staying here")
             
-            time.sleep(1)
+            time.sleep(0.5)
             
             # Step 2: 상단 발행 버튼 클릭 -> 발행 팝업 열기
             try:
