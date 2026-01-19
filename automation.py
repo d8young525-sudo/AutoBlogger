@@ -67,10 +67,39 @@ class NaverBlogBot:
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             options.add_experimental_option("useAutomationExtension", False)
             
+            # ====================================================
+            # 🔧 팝업 비활성화 설정 (비밀번호 저장, 알림 등)
+            # ====================================================
+            prefs = {
+                # 비밀번호 저장 팝업 비활성화
+                "credentials_enable_service": False,
+                "profile.password_manager_enabled": False,
+                
+                # 알림 팝업 비활성화
+                "profile.default_content_setting_values.notifications": 2,
+                
+                # 자동완성 비활성화
+                "autofill.profile_enabled": False,
+                "autofill.credit_card_enabled": False,
+                
+                # 번역 팝업 비활성화
+                "translate_whitelists": {},
+                "translate": {"enabled": False},
+                
+                # 기본 브라우저 설정 팝업 비활성화
+                "browser.default_browser_setting_enabled": False,
+            }
+            options.add_experimental_option("prefs", prefs)
+            
             # Stability settings
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
+            
+            # 추가 팝업/알림 비활성화
+            options.add_argument("--disable-notifications")
+            options.add_argument("--disable-popup-blocking")
+            options.add_argument("--disable-infobars")
             
             # Keep browser open after script ends (for debugging)
             if not self.headless:
