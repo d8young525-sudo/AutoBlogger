@@ -1,7 +1,7 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.5.6: 작성 중 팝업 및 도움말 패널 닫기 개선
+v3.5.7: 발행 팝업 UI 처리 개선 및 즉시 발행 플로우 안정화
 """
 import time
 import logging
@@ -529,10 +529,12 @@ class NaverBlogBot:
         
         플로우:
         1. 메인 프레임으로 전환 (발행 버튼은 iframe 밖에 있음)
-        2. 발행 버튼 클릭
-        3. 카테고리 선택 (있으면)
-        4. 즉시 발행 선택
-        5. 최종 발행 버튼 클릭
+        2. 발행 버튼 클릭 -> 발행 팝업 열림
+        3. 발행 팝업 내에서:
+           - 카테고리 선택 (있으면)
+           - 공개 설정 확인
+           - 즉시 발행 선택
+        4. 최종 발행 버튼 클릭
         """
         if not self.driver:
             return False, "Browser not started"
@@ -561,59 +563,174 @@ class NaverBlogBot:
             
             time.sleep(1)
             
-            # Step 2: 발행 버튼 클릭 (상단 발행 버튼)
-            publish_btn = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((
-                    By.CSS_SELECTOR, 
-                    "button.publish_btn__m9KHH, button[data-click-area='tpb.publish']"
-                ))
-            )
-            publish_btn.click()
-            time.sleep(1.5)
-            
-            # Step 2: 카테고리 선택 (설정된 카테고리가 있으면)
-            if target_category:
-                self._select_category(target_category)
-            
-            # Step 3: 즉시 발행 선택
+            # Step 2: 상단 발행 버튼 클릭 -> 발행 팝업 열기
             try:
-                # 현재 라디오 버튼 클릭
-                immediate_radio = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "label[for='radio_time1'], input#radio_time1"
+                publish_btn = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((
+                        By.CSS_SELECTOR, 
+                        "button.publish_btn__m9KHH, button[data-click-area='tpb.publish'], button.se-publish-btn"
+                    ))
                 )
-                immediate_radio.click()
-                time.sleep(0.5)
-            except Exception as e:
-                logger.warning(f"Could not click immediate publish radio: {e}")
-                # JavaScript로 시도
-                try:
-                    self.driver.execute_script(
-                        "document.getElementById('radio_time1').click();"
-                    )
-                except:
-                    pass
+                publish_btn.click()
+                logger.info("Clicked publish button - popup should open")
+            except TimeoutException:
+                # JavaScript로 발행 버튼 찾아서 클릭
+                self.driver.execute_script("""
+                    var btn = document.querySelector('button[data-click-area="tpb.publish"]') ||
+                              document.querySelector('button.publish_btn__m9KHH') ||
+                              document.querySelector('.publish_btn__m9KHH');
+                    if (btn) btn.click();
+                """)
+                logger.info("Clicked publish button via JS")
             
-            time.sleep(0.5)
+            time.sleep(2)  # 팝업이 열리는 시간 대기
+            
+            # Step 3: 발행 팝업 내에서 설정
+            self._handle_publish_popup(target_category)
+            
+            time.sleep(1)
             
             # Step 4: 최종 발행 버튼 클릭
-            final_btn = self.wait.until(
-                EC.element_to_be_clickable((
-                    By.CSS_SELECTOR, 
-                    "button.confirm_btn__WEaBq, button[data-testid='seOnePublishBtn']"
-                ))
-            )
-            final_btn.click()
-            
-            time.sleep(3)
-            logger.info("Post published successfully")
-            return True, "Published"
+            success = self._click_final_publish_button()
+            if success:
+                time.sleep(3)
+                logger.info("Post published successfully")
+                return True, "Published"
+            else:
+                return False, "Final publish button not found"
             
         except TimeoutException:
             return False, "Publish button not found"
         except Exception as e:
             logger.error(f"Publish failed: {e}")
             return False, f"Publish error: {str(e)}"
+
+    def _handle_publish_popup(self, target_category: str = ""):
+        """
+        발행 팝업 내에서 카테고리, 공개설정, 발행시간 등을 처리
+        
+        네이버 블로그 발행 팝업 구조:
+        1. 카테고리 선택 드롭다운
+        2. 공개 설정 (전체공개/이웃공개/비공개)
+        3. 발행 시간 (즉시 발행/예약 발행)
+        4. 태그 입력
+        """
+        try:
+            # 팝업이 열렸는지 확인
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located((
+                    By.CSS_SELECTOR,
+                    ".popup_publish, .se-publish-popup, [class*='publish'][class*='popup'], [class*='layer'][class*='publish']"
+                ))
+            )
+            logger.info("Publish popup detected")
+        except TimeoutException:
+            logger.warning("Publish popup not detected, proceeding anyway")
+        
+        # 1. 카테고리 선택 (설정된 카테고리가 있으면)
+        if target_category:
+            self._select_category(target_category)
+        
+        # 2. 즉시 발행 선택 (기본값)
+        self._select_immediate_publish()
+
+    def _select_immediate_publish(self):
+        """
+        즉시 발행 옵션 선택
+        """
+        try:
+            # 방법 1: 라디오 버튼 ID로 찾기
+            immediate_selectors = [
+                "input#radio_time1",
+                "input[name='publishTime'][value='immediate']",
+                "label[for='radio_time1']",
+                ".time_option input[type='radio']:first-child",
+                "[data-testid*='immediate']"
+            ]
+            
+            for selector in immediate_selectors:
+                try:
+                    radio = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    radio.click()
+                    logger.info(f"Selected immediate publish via {selector}")
+                    time.sleep(0.3)
+                    return
+                except NoSuchElementException:
+                    continue
+            
+            # 방법 2: JavaScript로 시도
+            self.driver.execute_script("""
+                // ID로 찾기
+                var radio = document.getElementById('radio_time1');
+                if (radio) { radio.click(); return; }
+                
+                // 첫 번째 발행 시간 라디오 찾기
+                var radios = document.querySelectorAll('input[type="radio"][name*="time"]');
+                if (radios.length > 0) { radios[0].click(); return; }
+                
+                // 즉시 발행 텍스트로 찾기
+                var labels = document.querySelectorAll('label');
+                for (var l of labels) {
+                    if (l.innerText.includes('즉시') || l.innerText.includes('바로')) {
+                        l.click(); return;
+                    }
+                }
+            """)
+            logger.info("Selected immediate publish via JS")
+            
+        except Exception as e:
+            logger.warning(f"Could not select immediate publish: {e}")
+
+    def _click_final_publish_button(self) -> bool:
+        """
+        최종 발행 버튼 클릭
+        
+        Returns:
+            True if clicked successfully
+        """
+        final_btn_selectors = [
+            "button.confirm_btn__WEaBq",
+            "button[data-testid='seOnePublishBtn']",
+            "button[data-click-area='ppp.confirm']",
+            ".btn_publish_confirm",
+            "button.btn_confirm",
+            "[class*='confirm'][class*='btn']"
+        ]
+        
+        for selector in final_btn_selectors:
+            try:
+                final_btn = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                )
+                final_btn.click()
+                logger.info(f"Clicked final publish button via {selector}")
+                return True
+            except (TimeoutException, NoSuchElementException):
+                continue
+        
+        # JavaScript로 시도
+        try:
+            self.driver.execute_script("""
+                // 발행/확인 버튼 찾기
+                var btn = document.querySelector('button.confirm_btn__WEaBq') ||
+                          document.querySelector('button[data-testid="seOnePublishBtn"]') ||
+                          document.querySelector('[data-click-area="ppp.confirm"]');
+                if (btn) { btn.click(); return true; }
+                
+                // 텍스트로 찾기
+                var buttons = document.querySelectorAll('button');
+                for (var b of buttons) {
+                    if (b.innerText.trim() === '발행' || b.innerText.includes('발행하기')) {
+                        b.click(); return true;
+                    }
+                }
+                return false;
+            """)
+            logger.info("Clicked final publish button via JS")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to click final publish button: {e}")
+            return False
 
     def _select_category(self, category_name: str):
         """
