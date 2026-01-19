@@ -1,7 +1,7 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.5.9: 발행 플로우 단순화 - 카테고리 선택만 처리
+v3.6.0: iframe 없는 새 에디터 지원 - PostWriteForm.naver 호환
 """
 import time
 import logging
@@ -47,6 +47,7 @@ class NaverBlogBot:
         self.wait: Optional[WebDriverWait] = None
         self.headless = headless or Config.HEADLESS_BROWSER
         self._is_logged_in = False
+        self._has_iframe = False  # 에디터 타입 (True=구 에디터, False=새 에디터)
         self.category = ""  # 발행할 카테고리
 
     def set_category(self, category: str):
@@ -251,7 +252,11 @@ class NaverBlogBot:
         """
         Navigate to blog editor
         
-        플로우: 블로그 메인 -> 글쓰기 버튼 클릭 -> 에디터 진입 -> iframe 전환
+        플로우: 블로그 메인 -> 글쓰기 에디터 진입
+        
+        주의: 네이버 에디터는 2가지 버전이 있음
+        1. 새 에디터 (PostWriteForm.naver) - iframe 없음
+        2. 구 에디터 (GoBlogWrite.naver + mainFrame) - iframe 있음
         """
         if not self.driver:
             return False, "Browser not started"
@@ -263,24 +268,17 @@ class NaverBlogBot:
             self.driver.get("https://blog.naver.com")
             time.sleep(2)
             
-            # Step 2: 글쓰기 에디터로 직접 이동 (GoBlogWrite.naver)
+            # Step 2: 글쓰기 에디터로 직접 이동
             self.driver.get("https://blog.naver.com/GoBlogWrite.naver")
             time.sleep(3)
             
-            # Step 3: "작성 중인 글이 있습니다" 팝업 처리 (메인 프레임에서)
+            # Step 3: "작성 중인 글이 있습니다" 팝업 처리
             self._handle_draft_popup()
             
-            # Step 4: mainFrame iframe으로 전환 (핵심!)
-            try:
-                iframe = WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.ID, "mainFrame"))
-                )
-                self.driver.switch_to.frame(iframe)
-                logger.info("Switched to mainFrame iframe")
-            except TimeoutException:
-                logger.warning("mainFrame not found, trying without iframe")
+            # Step 4: 에디터 타입 확인 (iframe 있는지 없는지)
+            self._check_editor_type()
             
-            # Step 5: 에디터 로드 확인 (iframe 내부에서)
+            # Step 5: 에디터 로드 확인
             try:
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((
@@ -288,18 +286,12 @@ class NaverBlogBot:
                         ".se-placeholder, .se-text-paragraph"
                     ))
                 )
-                logger.info("Editor loaded successfully (inside iframe)")
+                editor_type = "new (no iframe)" if not self._has_iframe else "old (with iframe)"
+                logger.info(f"Editor loaded successfully - {editor_type}")
                 return True, "Editor loaded"
             except TimeoutException:
-                # URL 확인 (iframe 전환 후에도 확인)
-                self.driver.switch_to.default_content()
+                # URL로 확인
                 if "PostWriteForm" in self.driver.current_url or "GoBlogWrite" in self.driver.current_url:
-                    # 다시 iframe으로 전환 시도
-                    try:
-                        iframe = self.driver.find_element(By.ID, "mainFrame")
-                        self.driver.switch_to.frame(iframe)
-                    except:
-                        pass
                     return True, "Editor loaded (URL verified)"
                 return False, "Editor elements not found"
             
@@ -308,30 +300,36 @@ class NaverBlogBot:
         except Exception as e:
             logger.error(f"Failed to load editor: {e}")
             return False, f"Editor error: {str(e)}"
+    
+    def _check_editor_type(self):
+        """
+        에디터 타입 확인 (iframe 유무)
+        새 에디터: PostWriteForm.naver - iframe 없음
+        구 에디터: mainFrame iframe 있음
+        """
+        try:
+            # mainFrame 존재 여부 확인
+            iframe = WebDriverWait(self.driver, 3).until(
+                EC.presence_of_element_located((By.ID, "mainFrame"))
+            )
+            self.driver.switch_to.frame(iframe)
+            self._has_iframe = True
+            logger.info("Detected old editor with mainFrame iframe")
+        except TimeoutException:
+            # iframe 없음 = 새 에디터
+            self._has_iframe = False
+            logger.info("Detected new editor without iframe")
 
     def _handle_draft_popup(self):
         """
         "작성 중인 글이 있습니다" 팝업 처리
         취소 버튼을 클릭하여 새 글 작성
         
-        팝업은 iframe 내부에 있음!
+        주의: 새 에디터는 iframe이 없으므로 직접 처리
         """
-        # iframe으로 전환 (팝업이 iframe 내부에 있음)
+        # 먼저 메인 페이지에서 팝업 확인 (새 에디터)
         try:
-            self.driver.switch_to.default_content()
-            iframe = WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((By.ID, "mainFrame"))
-            )
-            self.driver.switch_to.frame(iframe)
-            logger.info("Switched to mainFrame for popup handling")
-        except Exception as e:
-            logger.warning(f"Could not switch to iframe: {e}")
-            
-        # "작성 중인 글이 있습니다" 팝업 처리
-        try:
-            # 팝업 취소 버튼 찾기 (iframe 내부)
-            # 셀렉터: button.se-popup-button.se-popup-button-cancel
-            cancel_btn = WebDriverWait(self.driver, 5).until(
+            cancel_btn = WebDriverWait(self.driver, 3).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR, 
                     "button.se-popup-button.se-popup-button-cancel, button.se-popup-button-cancel"
@@ -340,13 +338,37 @@ class NaverBlogBot:
             cancel_btn.click()
             logger.info("Closed draft popup - starting fresh")
             time.sleep(1)
+            return
         except TimeoutException:
-            # 팝업이 없으면 정상 진행
+            pass
+        
+        # iframe 안에 팝업이 있을 수 있음 (구 에디터)
+        try:
+            self.driver.switch_to.default_content()
+            iframe = WebDriverWait(self.driver, 3).until(
+                EC.presence_of_element_located((By.ID, "mainFrame"))
+            )
+            self.driver.switch_to.frame(iframe)
+            logger.info("Switched to mainFrame for popup handling")
+            
+            cancel_btn = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR, 
+                    "button.se-popup-button.se-popup-button-cancel, button.se-popup-button-cancel"
+                ))
+            )
+            cancel_btn.click()
+            logger.info("Closed draft popup in iframe")
+            time.sleep(1)
+            
+            # 다시 default로 복귀
+            self.driver.switch_to.default_content()
+        except TimeoutException:
             logger.info("No draft popup found")
         except Exception as e:
             logger.warning(f"Draft popup handling: {e}")
         
-        # 도움말 패널 닫기 (iframe 내부에서)
+        # 도움말 패널 닫기
         self._close_help_panel()
 
     def _close_help_panel(self):
@@ -391,16 +413,23 @@ class NaverBlogBot:
         except Exception as e:
             logger.debug(f"JS help panel close: {e}")
 
-    def _ensure_in_iframe(self):
+    def _ensure_in_editor(self):
         """
-        mainFrame iframe 내부에 있는지 확인하고, 아니면 전환
+        에디터 영역에 있는지 확인
+        새 에디터: iframe 없이 직접 접근
+        구 에디터: mainFrame iframe 내부로 전환
         """
         try:
-            # iframe 내부에서만 보이는 요소 확인
+            # 에디터 요소 확인
             self.driver.find_element(By.CSS_SELECTOR, ".se-placeholder, .se-component")
             return True
         except NoSuchElementException:
-            # iframe으로 전환 필요
+            # 새 에디터인 경우 (iframe 없음) - 이미 접근 가능
+            if hasattr(self, '_has_iframe') and not self._has_iframe:
+                logger.info("New editor - no iframe needed")
+                return True
+            
+            # 구 에디터인 경우 - iframe으로 전환 시도
             try:
                 self.driver.switch_to.default_content()
                 iframe = self.driver.find_element(By.ID, "mainFrame")
@@ -408,8 +437,8 @@ class NaverBlogBot:
                 logger.info("Switched to mainFrame iframe")
                 return True
             except Exception as e:
-                logger.error(f"Failed to switch to iframe: {e}")
-                return False
+                logger.warning(f"Could not switch to iframe: {e}")
+                return True  # 새 에디터일 수 있으므로 진행
 
     def write_content(self, title: str, content: str) -> Tuple[bool, str]:
         """
@@ -428,9 +457,8 @@ class NaverBlogBot:
         try:
             logger.info("Writing content...")
             
-            # Step 0: iframe 내부인지 확인하고 전환
-            if not self._ensure_in_iframe():
-                return False, "Failed to access editor iframe"
+            # Step 0: 에디터 영역 확인
+            self._ensure_in_editor()
             
             # Step 1: 제목 입력
             # 제목 placeholder 클릭 (.se-fs32 = 32px 폰트 = 제목)
@@ -546,20 +574,17 @@ class NaverBlogBot:
             logger.info("Publishing post...")
             
             # Step 0: 도움말 패널 닫기 (발행 버튼을 가릴 수 있음)
-            # iframe 내부에서 도움말 패널 닫기 시도
-            try:
-                if not self._ensure_in_iframe():
-                    pass
-                self._close_help_panel()
-            except:
-                pass
+            self._close_help_panel()
             
-            # Step 1: 메인 프레임으로 전환 (발행 버튼은 iframe 밖에 있음)
-            try:
-                self.driver.switch_to.default_content()
-                logger.info("Switched to default content for publish")
-            except:
-                pass
+            # Step 1: 메인 페이지로 전환 (구 에디터는 iframe 밖에 발행 버튼 있음)
+            if hasattr(self, '_has_iframe') and self._has_iframe:
+                try:
+                    self.driver.switch_to.default_content()
+                    logger.info("Switched to default content for publish (old editor)")
+                except:
+                    pass
+            else:
+                logger.info("New editor - publish button is directly accessible")
             
             time.sleep(1)
             
