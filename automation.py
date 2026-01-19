@@ -1,7 +1,7 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.5.7: 발행 팝업 UI 처리 개선 및 즉시 발행 플로우 안정화
+v3.5.8: 발행 팝업 셀렉터 업데이트 및 전체공개 기본 설정
 """
 import time
 import logging
@@ -609,77 +609,75 @@ class NaverBlogBot:
         """
         발행 팝업 내에서 카테고리, 공개설정, 발행시간 등을 처리
         
-        네이버 블로그 발행 팝업 구조:
-        1. 카테고리 선택 드롭다운
-        2. 공개 설정 (전체공개/이웃공개/비공개)
-        3. 발행 시간 (즉시 발행/예약 발행)
-        4. 태그 입력
+        네이버 블로그 발행 팝업 구조 (2024 업데이트):
+        - 팝업 컨테이너: layer_publish__vA9PX
+        - 카테고리: selectbox_button__jb1Dt
+        - 공개설정: #open_public, #open_neighbor 등
+        - 최종 발행: confirm_btn__WEaBq
         """
         try:
-            # 팝업이 열렸는지 확인
+            # 팝업이 열렸는지 확인 (업데이트된 셀렉터)
             WebDriverWait(self.driver, 5).until(
                 EC.presence_of_element_located((
                     By.CSS_SELECTOR,
-                    ".popup_publish, .se-publish-popup, [class*='publish'][class*='popup'], [class*='layer'][class*='publish']"
+                    ".layer_publish__vA9PX, .layer_content_set_publish__KDvaV, [class*='layer_publish']"
                 ))
             )
-            logger.info("Publish popup detected")
+            logger.info("Publish popup detected (layer_publish)")
         except TimeoutException:
             logger.warning("Publish popup not detected, proceeding anyway")
         
-        # 1. 카테고리 선택 (설정된 카테고리가 있으면)
+        # 1. 전체공개 설정 (기본값으로 설정)
+        self._select_public_open()
+        
+        # 2. 카테고리 선택 (설정된 카테고리가 있으면)
         if target_category:
             self._select_category(target_category)
-        
-        # 2. 즉시 발행 선택 (기본값)
-        self._select_immediate_publish()
 
-    def _select_immediate_publish(self):
+    def _select_public_open(self):
         """
-        즉시 발행 옵션 선택
+        전체공개 옵션 선택 (기본값)
+        
+        공개설정 라디오 버튼:
+        - #open_public: 전체공개
+        - #open_neighbor: 이웃공개  
+        - #open_both_neighbor: 서로이웃공개
+        - #open_private: 비공개
         """
         try:
-            # 방법 1: 라디오 버튼 ID로 찾기
-            immediate_selectors = [
-                "input#radio_time1",
-                "input[name='publishTime'][value='immediate']",
-                "label[for='radio_time1']",
-                ".time_option input[type='radio']:first-child",
-                "[data-testid*='immediate']"
+            # 전체공개 라디오 버튼 클릭
+            public_selectors = [
+                "input#open_public",
+                "input[id='open_public']",
+                "label[for='open_public']",
+                ".radio_item__PIBr7[id='open_public']"
             ]
             
-            for selector in immediate_selectors:
+            for selector in public_selectors:
                 try:
                     radio = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    radio.click()
-                    logger.info(f"Selected immediate publish via {selector}")
+                    if not radio.is_selected():
+                        radio.click()
+                        logger.info(f"Selected public open via {selector}")
+                    else:
+                        logger.info("Public open already selected")
                     time.sleep(0.3)
                     return
                 except NoSuchElementException:
                     continue
             
-            # 방법 2: JavaScript로 시도
+            # JavaScript로 시도
             self.driver.execute_script("""
-                // ID로 찾기
-                var radio = document.getElementById('radio_time1');
-                if (radio) { radio.click(); return; }
-                
-                // 첫 번째 발행 시간 라디오 찾기
-                var radios = document.querySelectorAll('input[type="radio"][name*="time"]');
-                if (radios.length > 0) { radios[0].click(); return; }
-                
-                // 즉시 발행 텍스트로 찾기
-                var labels = document.querySelectorAll('label');
-                for (var l of labels) {
-                    if (l.innerText.includes('즉시') || l.innerText.includes('바로')) {
-                        l.click(); return;
-                    }
+                var radio = document.getElementById('open_public');
+                if (radio && !radio.checked) {
+                    radio.click();
+                    console.log('Selected public open via JS');
                 }
             """)
-            logger.info("Selected immediate publish via JS")
+            logger.info("Selected public open via JS")
             
         except Exception as e:
-            logger.warning(f"Could not select immediate publish: {e}")
+            logger.warning(f"Could not select public open: {e}")
 
     def _click_final_publish_button(self) -> bool:
         """
@@ -738,47 +736,79 @@ class NaverBlogBot:
         
         Args:
             category_name: 선택할 카테고리명
+            
+        네이버 블로그 카테고리 구조 (2024 업데이트):
+        - 카테고리 버튼: selectbox_button__jb1Dt (현재 선택된 카테고리 표시)
+        - 드롭다운 열리면 카테고리 목록 표시
         """
         try:
             logger.info(f"Selecting category: {category_name}")
             
-            # Step 1: 카테고리 드롭다운 버튼 클릭
-            category_btn = WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable((
-                    By.CSS_SELECTOR,
-                    "span.text__sraQE[data-testid^='categoryItemText'], .category_btn, [class*='category']"
-                ))
-            )
-            category_btn.click()
-            time.sleep(1)
+            # Step 1: 카테고리 드롭다운 버튼 클릭 (업데이트된 셀렉터)
+            category_btn_selectors = [
+                "button.selectbox_button__jb1Dt",
+                ".option_category___kpJc button",
+                "[class*='selectbox_button']",
+                "[class*='category'] button"
+            ]
+            
+            category_btn = None
+            for selector in category_btn_selectors:
+                try:
+                    category_btn = WebDriverWait(self.driver, 3).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                    )
+                    break
+                except TimeoutException:
+                    continue
+            
+            if category_btn:
+                category_btn.click()
+                logger.info("Opened category dropdown")
+                time.sleep(1)
+            else:
+                logger.warning("Category dropdown button not found")
+                return
             
             # Step 2: 카테고리 목록에서 해당 카테고리 찾아서 클릭
             try:
-                # data-testid로 카테고리 항목 찾기
+                # 드롭다운 목록에서 카테고리 항목 찾기
                 category_items = self.driver.find_elements(
                     By.CSS_SELECTOR,
-                    "span.text__sraQE[data-testid^='categoryItemText']"
+                    "[class*='selectbox'] li, [class*='dropdown'] li, [class*='option'] li, ul li"
                 )
                 
                 for item in category_items:
                     item_text = item.text.strip()
-                    # 카테고리명 비교 (비공개 아이콘 등 제외하고 텍스트만)
-                    if category_name in item_text or item_text in category_name:
-                        # 해당 카테고리의 label 클릭
-                        parent = item.find_element(By.XPATH, "./ancestor::label")
-                        parent.click()
+                    if not item_text:
+                        continue
+                    # 카테고리명 비교
+                    if category_name == item_text or category_name in item_text:
+                        item.click()
                         logger.info(f"Selected category: {item_text}")
                         time.sleep(0.5)
                         return
                 
-                # 정확히 일치하는 것 없으면 부분 일치 시도
+                # 부분 일치 시도
                 for item in category_items:
-                    if category_name.lower() in item.text.lower():
-                        parent = item.find_element(By.XPATH, "./ancestor::label")
-                        parent.click()
-                        logger.info(f"Selected category (partial match): {item.text}")
+                    item_text = item.text.strip()
+                    if item_text and category_name.lower() in item_text.lower():
+                        item.click()
+                        logger.info(f"Selected category (partial match): {item_text}")
                         time.sleep(0.5)
                         return
+                
+                # JavaScript로 시도
+                self.driver.execute_script(f"""
+                    var items = document.querySelectorAll('li, [class*="option"]');
+                    for (var item of items) {{
+                        if (item.innerText && item.innerText.includes('{category_name}')) {{
+                            item.click();
+                            console.log('Selected category via JS: ' + item.innerText);
+                            return;
+                        }}
+                    }}
+                """)
                         
                 logger.warning(f"Category '{category_name}' not found in list")
                 
