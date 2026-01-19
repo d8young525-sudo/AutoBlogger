@@ -1,7 +1,7 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.5.8: 발행 팝업 셀렉터 업데이트 및 전체공개 기본 설정
+v3.5.9: 발행 플로우 단순화 - 카테고리 선택만 처리
 """
 import time
 import logging
@@ -607,77 +607,31 @@ class NaverBlogBot:
 
     def _handle_publish_popup(self, target_category: str = ""):
         """
-        발행 팝업 내에서 카테고리, 공개설정, 발행시간 등을 처리
+        발행 팝업 내에서 카테고리 선택만 처리
         
-        네이버 블로그 발행 팝업 구조 (2024 업데이트):
+        네이버 블로그 발행 팝업 구조:
         - 팝업 컨테이너: layer_publish__vA9PX
-        - 카테고리: selectbox_button__jb1Dt
-        - 공개설정: #open_public, #open_neighbor 등
+        - 카테고리 버튼: selectbox_button__jb1Dt
+        - 공개설정: #open_public (기본값 = 전체공개) → 건드리지 않음
+        - 발행시간: #radio_time1 (기본값 = 현재/즉시) → 건드리지 않음
         - 최종 발행: confirm_btn__WEaBq
         """
         try:
-            # 팝업이 열렸는지 확인 (업데이트된 셀렉터)
+            # 팝업이 열렸는지 확인
             WebDriverWait(self.driver, 5).until(
                 EC.presence_of_element_located((
                     By.CSS_SELECTOR,
                     ".layer_publish__vA9PX, .layer_content_set_publish__KDvaV, [class*='layer_publish']"
                 ))
             )
-            logger.info("Publish popup detected (layer_publish)")
+            logger.info("Publish popup detected")
         except TimeoutException:
             logger.warning("Publish popup not detected, proceeding anyway")
         
-        # 1. 전체공개 설정 (기본값으로 설정)
-        self._select_public_open()
-        
-        # 2. 카테고리 선택 (설정된 카테고리가 있으면)
+        # 카테고리 선택 (설정된 카테고리가 있으면)
+        # 공개설정(#open_public)과 발행시간(#radio_time1)은 기본값이 원하는 값이므로 건드리지 않음
         if target_category:
             self._select_category(target_category)
-
-    def _select_public_open(self):
-        """
-        전체공개 옵션 선택 (기본값)
-        
-        공개설정 라디오 버튼:
-        - #open_public: 전체공개
-        - #open_neighbor: 이웃공개  
-        - #open_both_neighbor: 서로이웃공개
-        - #open_private: 비공개
-        """
-        try:
-            # 전체공개 라디오 버튼 클릭
-            public_selectors = [
-                "input#open_public",
-                "input[id='open_public']",
-                "label[for='open_public']",
-                ".radio_item__PIBr7[id='open_public']"
-            ]
-            
-            for selector in public_selectors:
-                try:
-                    radio = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    if not radio.is_selected():
-                        radio.click()
-                        logger.info(f"Selected public open via {selector}")
-                    else:
-                        logger.info("Public open already selected")
-                    time.sleep(0.3)
-                    return
-                except NoSuchElementException:
-                    continue
-            
-            # JavaScript로 시도
-            self.driver.execute_script("""
-                var radio = document.getElementById('open_public');
-                if (radio && !radio.checked) {
-                    radio.click();
-                    console.log('Selected public open via JS');
-                }
-            """)
-            logger.info("Selected public open via JS")
-            
-        except Exception as e:
-            logger.warning(f"Could not select public open: {e}")
 
     def _click_final_publish_button(self) -> bool:
         """
