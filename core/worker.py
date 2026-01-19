@@ -231,6 +231,22 @@ class AutomationWorker(QThread):
             if self._is_cancelled:
                 return
             
+            # Step 4.5: Upload cover image (if provided)
+            thumbnail_path = self.data.get('thumbnail_path', '')
+            if thumbnail_path:
+                self.log_signal.emit("🖼️ 대표 이미지 등록 중...")
+                self.progress_signal.emit(90)
+                
+                success, msg = self.bot.upload_cover_image(thumbnail_path)
+                if success:
+                    self.log_signal.emit("✅ 대표 이미지 등록 완료!")
+                else:
+                    self.log_signal.emit(f"⚠️ 대표 이미지 등록 실패: {msg}")
+                    # 이미지 실패해도 발행은 계속 진행
+            
+            if self._is_cancelled:
+                return
+            
             # Step 5: Publish (with category)
             self.log_signal.emit("📤 발행 중...")
             self.progress_signal.emit(95)

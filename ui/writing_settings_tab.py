@@ -10,9 +10,11 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, 
     QLineEdit, QPushButton, QMessageBox,
     QHBoxLayout, QLabel, QComboBox,
-    QTabWidget, QScrollArea, QCheckBox, QRadioButton, QButtonGroup
+    QTabWidget, QScrollArea, QCheckBox, QRadioButton, QButtonGroup,
+    QFileDialog
 )
 from PySide6.QtCore import QSettings, Signal
+import os
 
 
 class WritingSettingsTab(QWidget):
@@ -109,7 +111,28 @@ class WritingSettingsTab(QWidget):
         self.chk_auto_thumbnail.setChecked(True)
         thumb_layout.addWidget(self.chk_auto_thumbnail)
         
-        thumb_notice = QLabel("💡 썸네일은 주제를 기반으로 AI가 자동 생성합니다.")
+        # 썸네일 저장 경로 설정
+        path_layout = QHBoxLayout()
+        path_label = QLabel("썸네일 저장 경로:")
+        path_layout.addWidget(path_label)
+        
+        self.input_thumbnail_path = QLineEdit()
+        self.input_thumbnail_path.setPlaceholderText("예: C:\\Users\\Pictures\\blog_thumbnails")
+        path_layout.addWidget(self.input_thumbnail_path)
+        
+        self.btn_browse_path = QPushButton("📁")
+        self.btn_browse_path.setFixedWidth(40)
+        self.btn_browse_path.clicked.connect(self._browse_thumbnail_path)
+        path_layout.addWidget(self.btn_browse_path)
+        
+        thumb_layout.addLayout(path_layout)
+        
+        # 자동 등록 옵션
+        self.chk_auto_upload_thumbnail = QCheckBox("생성 후 자동으로 대표 이미지 등록")
+        self.chk_auto_upload_thumbnail.setChecked(True)
+        thumb_layout.addWidget(self.chk_auto_upload_thumbnail)
+        
+        thumb_notice = QLabel("💡 썸네일은 주제를 기반으로 AI가 자동 생성하며, 지정된 경로에 저장됩니다.")
         thumb_notice.setStyleSheet("color: #888; font-size: 11px;")
         thumb_layout.addWidget(thumb_notice)
         
@@ -239,6 +262,15 @@ class WritingSettingsTab(QWidget):
         self.chk_auto_thumbnail.setChecked(
             self.settings.value("writing/auto_thumbnail", True, type=bool))
         
+        # 썸네일 저장 경로 (기본값: 사용자 Pictures 폴더)
+        default_path = os.path.join(os.path.expanduser("~"), "Pictures", "blog_thumbnails")
+        self.input_thumbnail_path.setText(
+            self.settings.value("writing/thumbnail_path", default_path))
+        
+        # 자동 등록 설정
+        self.chk_auto_upload_thumbnail.setChecked(
+            self.settings.value("writing/auto_upload_thumbnail", True, type=bool))
+        
         # 출력 스타일 설정
         self._load_output_style_settings()
     
@@ -293,6 +325,10 @@ class WritingSettingsTab(QWidget):
         # 썸네일 설정
         self.settings.setValue("writing/auto_thumbnail", 
                                self.chk_auto_thumbnail.isChecked())
+        self.settings.setValue("writing/thumbnail_path",
+                               self.input_thumbnail_path.text().strip())
+        self.settings.setValue("writing/auto_upload_thumbnail",
+                               self.chk_auto_upload_thumbnail.isChecked())
         
         # 출력 스타일 설정
         self._save_output_style_settings()
@@ -363,6 +399,29 @@ class WritingSettingsTab(QWidget):
     def is_auto_thumbnail_enabled(self) -> bool:
         """자동 썸네일 생성 여부"""
         return self.chk_auto_thumbnail.isChecked()
+    
+    def get_thumbnail_path(self) -> str:
+        """썸네일 저장 경로 반환"""
+        path = self.input_thumbnail_path.text().strip()
+        if not path:
+            path = os.path.join(os.path.expanduser("~"), "Pictures", "blog_thumbnails")
+        return path
+    
+    def is_auto_upload_thumbnail_enabled(self) -> bool:
+        """자동 대표 이미지 등록 여부"""
+        return self.chk_auto_upload_thumbnail.isChecked()
+    
+    def _browse_thumbnail_path(self):
+        """썸네일 저장 경로 선택 다이얼로그"""
+        current_path = self.input_thumbnail_path.text().strip()
+        if not current_path or not os.path.exists(current_path):
+            current_path = os.path.expanduser("~")
+        
+        folder = QFileDialog.getExistingDirectory(
+            self, "썸네일 저장 폴더 선택", current_path
+        )
+        if folder:
+            self.input_thumbnail_path.setText(folder)
     
     def get_output_style_settings(self) -> dict:
         """출력 스타일 설정값 반환"""

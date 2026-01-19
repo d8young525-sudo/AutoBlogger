@@ -1,10 +1,11 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.6.1: 발행 버튼이 iframe 안에 있음 - default_content 호출 제거
+v3.6.2: 대표 썸네일 이미지 업로드 기능 추가
 """
 import time
 import logging
+import os
 from typing import Tuple, Optional
 
 try:
@@ -547,6 +548,90 @@ class NaverBlogBot:
         except Exception as e:
             logger.error(f"Failed to write content: {e}")
             return False, f"Write error: {str(e)}"
+
+    def upload_cover_image(self, image_path: str) -> Tuple[bool, str]:
+        """
+        대표 썸네일(커버) 이미지 업로드
+        
+        Args:
+            image_path: 업로드할 이미지 파일 경로
+            
+        Returns:
+            Tuple of (success, message)
+            
+        네이버 에디터 커버 이미지 구조:
+        - 업로드 버튼: se-cover-button-local-image-upload
+        - 파일 input: id="hidden-file" (동적 생성)
+        """
+        if not self.driver:
+            return False, "Browser not started"
+        
+        if not image_path or not os.path.exists(image_path):
+            return False, f"Image file not found: {image_path}"
+            
+        try:
+            logger.info(f"Uploading cover image: {image_path}")
+            
+            # Step 1: 에디터 영역 확인
+            self._ensure_in_editor()
+            
+            # Step 2: 커버 이미지 업로드 버튼 클릭
+            try:
+                upload_btn = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((
+                        By.CSS_SELECTOR,
+                        ".se-cover-button-local-image-upload"
+                    ))
+                )
+                upload_btn.click()
+                logger.info("Clicked cover image upload button")
+            except TimeoutException:
+                # JavaScript로 클릭 시도
+                self.driver.execute_script("""
+                    var btn = document.querySelector('.se-cover-button-local-image-upload');
+                    if (btn) btn.click();
+                """)
+                logger.info("Clicked cover image upload button via JS")
+            
+            time.sleep(1)
+            
+            # Step 3: 숨겨진 file input에 파일 경로 전달
+            try:
+                file_input = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.ID, "hidden-file"))
+                )
+                # 파일 경로 전달 (Windows 경로 그대로 사용)
+                file_input.send_keys(image_path)
+                logger.info(f"File path sent to input: {image_path}")
+            except TimeoutException:
+                # 대안: 모든 file input 찾기
+                file_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
+                if file_inputs:
+                    file_inputs[0].send_keys(image_path)
+                    logger.info("File path sent to first file input")
+                else:
+                    return False, "File input not found"
+            
+            time.sleep(2)  # 이미지 업로드 대기
+            
+            # Step 4: 업로드 성공 확인
+            try:
+                # 커버 이미지가 설정되면 편집/삭제 버튼이 나타남
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((
+                        By.CSS_SELECTOR,
+                        ".se-cover-button-del-image, .se-cover-image"
+                    ))
+                )
+                logger.info("Cover image uploaded successfully")
+                return True, "Cover image uploaded"
+            except TimeoutException:
+                logger.warning("Could not verify cover image upload")
+                return True, "Cover image upload attempted"
+            
+        except Exception as e:
+            logger.error(f"Failed to upload cover image: {e}")
+            return False, f"Cover image error: {str(e)}"
 
     def publish_post(self, category: str = "") -> Tuple[bool, str]:
         """
