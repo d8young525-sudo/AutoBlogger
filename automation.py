@@ -1,7 +1,7 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.5.5: iframe 내부 에디터 접근 문제 해결, 제목/본문 입력 안정화
+v3.5.6: 작성 중 팝업 및 도움말 패널 닫기 개선
 """
 import time
 import logging
@@ -314,20 +314,27 @@ class NaverBlogBot:
         "작성 중인 글이 있습니다" 팝업 처리
         취소 버튼을 클릭하여 새 글 작성
         
-        주의: 이 함수는 메인 프레임에서 호출되어야 함 (iframe 전환 전)
+        팝업은 iframe 내부에 있음!
         """
-        # 메인 프레임으로 복귀 (확실하게)
+        # iframe으로 전환 (팝업이 iframe 내부에 있음)
         try:
             self.driver.switch_to.default_content()
-        except:
-            pass
+            iframe = WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located((By.ID, "mainFrame"))
+            )
+            self.driver.switch_to.frame(iframe)
+            logger.info("Switched to mainFrame for popup handling")
+        except Exception as e:
+            logger.warning(f"Could not switch to iframe: {e}")
             
+        # "작성 중인 글이 있습니다" 팝업 처리
         try:
-            # 팝업이 나타날 때까지 잠시 대기
+            # 팝업 취소 버튼 찾기 (iframe 내부)
+            # 셀렉터: button.se-popup-button.se-popup-button-cancel
             cancel_btn = WebDriverWait(self.driver, 5).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR, 
-                    "button.se-popup-button-cancel"
+                    "button.se-popup-button.se-popup-button-cancel, button.se-popup-button-cancel"
                 ))
             )
             cancel_btn.click()
@@ -339,28 +346,50 @@ class NaverBlogBot:
         except Exception as e:
             logger.warning(f"Draft popup handling: {e}")
         
-        # 도움말 패널 닫기
+        # 도움말 패널 닫기 (iframe 내부에서)
         self._close_help_panel()
 
     def _close_help_panel(self):
         """
         도움말 패널이 있으면 닫기
+        도움말 패널이 발행 버튼을 가리고 있어서 반드시 닫아야 함!
+        
+        셀렉터: button.se-help-panel-close-button > span.se-blind("닫기")
         """
+        # 여러 번 시도 (패널이 늦게 나타날 수 있음)
+        for attempt in range(3):
+            try:
+                # 방법 1: 직접 셀렉터로 찾기
+                help_close_btn = WebDriverWait(self.driver, 3).until(
+                    EC.element_to_be_clickable((
+                        By.CSS_SELECTOR, 
+                        "button.se-help-panel-close-button"
+                    ))
+                )
+                help_close_btn.click()
+                logger.info("Closed help panel")
+                time.sleep(0.5)
+                return  # 성공하면 종료
+            except TimeoutException:
+                # 도움말 패널이 없으면 정상 진행
+                if attempt == 0:
+                    logger.info("No help panel found (attempt 1)")
+                break
+            except Exception as e:
+                logger.warning(f"Help panel handling attempt {attempt + 1}: {e}")
+                time.sleep(0.5)
+        
+        # 방법 2: JavaScript로 강제 닫기 시도
         try:
-            help_close_btn = WebDriverWait(self.driver, 3).until(
-                EC.element_to_be_clickable((
-                    By.CSS_SELECTOR, 
-                    "button.se-help-panel-close-button"
-                ))
-            )
-            help_close_btn.click()
-            logger.info("Closed help panel")
-            time.sleep(0.5)
-        except TimeoutException:
-            # 도움말 패널이 없으면 정상 진행
-            pass
+            self.driver.execute_script("""
+                var closeBtn = document.querySelector('button.se-help-panel-close-button');
+                if (closeBtn) {
+                    closeBtn.click();
+                    console.log('Help panel closed via JS');
+                }
+            """)
         except Exception as e:
-            logger.warning(f"Help panel handling: {e}")
+            logger.debug(f"JS help panel close: {e}")
 
     def _ensure_in_iframe(self):
         """
@@ -514,7 +543,16 @@ class NaverBlogBot:
         try:
             logger.info("Publishing post...")
             
-            # Step 0: 메인 프레임으로 전환 (발행 버튼은 iframe 밖에 있음)
+            # Step 0: 도움말 패널 닫기 (발행 버튼을 가릴 수 있음)
+            # iframe 내부에서 도움말 패널 닫기 시도
+            try:
+                if not self._ensure_in_iframe():
+                    pass
+                self._close_help_panel()
+            except:
+                pass
+            
+            # Step 1: 메인 프레임으로 전환 (발행 버튼은 iframe 밖에 있음)
             try:
                 self.driver.switch_to.default_content()
                 logger.info("Switched to default content for publish")
@@ -523,7 +561,7 @@ class NaverBlogBot:
             
             time.sleep(1)
             
-            # Step 1: 발행 버튼 클릭 (상단 발행 버튼)
+            # Step 2: 발행 버튼 클릭 (상단 발행 버튼)
             publish_btn = WebDriverWait(self.driver, 10).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR, 
