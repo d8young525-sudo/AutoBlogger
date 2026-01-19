@@ -1,7 +1,7 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.5.2: 글쓰기 에디터 진입 플로우 개선, 카테고리 선택 기능 추가
+v3.5.5: iframe 내부 에디터 접근 문제 해결, 제목/본문 입력 안정화
 """
 import time
 import logging
@@ -251,7 +251,7 @@ class NaverBlogBot:
         """
         Navigate to blog editor
         
-        플로우: 블로그 메인 -> 글쓰기 버튼 클릭 -> 에디터 진입
+        플로우: 블로그 메인 -> 글쓰기 버튼 클릭 -> 에디터 진입 -> iframe 전환
         """
         if not self.driver:
             return False, "Browser not started"
@@ -267,23 +267,39 @@ class NaverBlogBot:
             self.driver.get("https://blog.naver.com/GoBlogWrite.naver")
             time.sleep(3)
             
-            # Step 3: "작성 중인 글이 있습니다" 팝업 처리
+            # Step 3: "작성 중인 글이 있습니다" 팝업 처리 (메인 프레임에서)
             self._handle_draft_popup()
             
-            # Step 4: 에디터 로드 확인
+            # Step 4: mainFrame iframe으로 전환 (핵심!)
             try:
-                # 에디터의 제목 placeholder 확인
+                iframe = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.ID, "mainFrame"))
+                )
+                self.driver.switch_to.frame(iframe)
+                logger.info("Switched to mainFrame iframe")
+            except TimeoutException:
+                logger.warning("mainFrame not found, trying without iframe")
+            
+            # Step 5: 에디터 로드 확인 (iframe 내부에서)
+            try:
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((
                         By.CSS_SELECTOR, 
-                        ".se-placeholder, .se-text-paragraph, [class*='editor']"
+                        ".se-placeholder, .se-text-paragraph"
                     ))
                 )
-                logger.info("Editor loaded successfully")
+                logger.info("Editor loaded successfully (inside iframe)")
                 return True, "Editor loaded"
             except TimeoutException:
-                # URL 확인
+                # URL 확인 (iframe 전환 후에도 확인)
+                self.driver.switch_to.default_content()
                 if "PostWriteForm" in self.driver.current_url or "GoBlogWrite" in self.driver.current_url:
+                    # 다시 iframe으로 전환 시도
+                    try:
+                        iframe = self.driver.find_element(By.ID, "mainFrame")
+                        self.driver.switch_to.frame(iframe)
+                    except:
+                        pass
                     return True, "Editor loaded (URL verified)"
                 return False, "Editor elements not found"
             
@@ -297,7 +313,15 @@ class NaverBlogBot:
         """
         "작성 중인 글이 있습니다" 팝업 처리
         취소 버튼을 클릭하여 새 글 작성
+        
+        주의: 이 함수는 메인 프레임에서 호출되어야 함 (iframe 전환 전)
         """
+        # 메인 프레임으로 복귀 (확실하게)
+        try:
+            self.driver.switch_to.default_content()
+        except:
+            pass
+            
         try:
             # 팝업이 나타날 때까지 잠시 대기
             cancel_btn = WebDriverWait(self.driver, 5).until(
@@ -338,6 +362,26 @@ class NaverBlogBot:
         except Exception as e:
             logger.warning(f"Help panel handling: {e}")
 
+    def _ensure_in_iframe(self):
+        """
+        mainFrame iframe 내부에 있는지 확인하고, 아니면 전환
+        """
+        try:
+            # iframe 내부에서만 보이는 요소 확인
+            self.driver.find_element(By.CSS_SELECTOR, ".se-placeholder, .se-component")
+            return True
+        except NoSuchElementException:
+            # iframe으로 전환 필요
+            try:
+                self.driver.switch_to.default_content()
+                iframe = self.driver.find_element(By.ID, "mainFrame")
+                self.driver.switch_to.frame(iframe)
+                logger.info("Switched to mainFrame iframe")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to switch to iframe: {e}")
+                return False
+
     def write_content(self, title: str, content: str) -> Tuple[bool, str]:
         """
         Write blog content
@@ -355,25 +399,38 @@ class NaverBlogBot:
         try:
             logger.info("Writing content...")
             
+            # Step 0: iframe 내부인지 확인하고 전환
+            if not self._ensure_in_iframe():
+                return False, "Failed to access editor iframe"
+            
             # Step 1: 제목 입력
-            # 제목 placeholder 클릭
+            # 제목 placeholder 클릭 (.se-fs32 = 32px 폰트 = 제목)
             try:
-                title_area = self.wait.until(
+                title_area = WebDriverWait(self.driver, 10).until(
                     EC.element_to_be_clickable((
                         By.CSS_SELECTOR, 
-                        ".se-placeholder.se-fs32, span.se-placeholder[class*='fs32']"
+                        "span.se-placeholder.se-fs32"
                     ))
                 )
                 title_area.click()
-            except:
+                logger.info("Clicked title placeholder")
+            except TimeoutException:
                 # 대안: 제목 텍스트로 찾기
-                title_area = self.wait.until(
-                    EC.element_to_be_clickable((
+                try:
+                    title_area = self.driver.find_element(
                         By.XPATH, 
                         "//span[contains(@class, 'se-placeholder') and text()='제목']"
-                    ))
-                )
-                title_area.click()
+                    )
+                    title_area.click()
+                    logger.info("Clicked title placeholder (by text)")
+                except:
+                    # 대안 2: 제목 컴포넌트 영역 클릭
+                    title_component = self.driver.find_element(
+                        By.CSS_SELECTOR,
+                        ".se-documentTitle .se-text-paragraph"
+                    )
+                    title_component.click()
+                    logger.info("Clicked title component area")
             
             time.sleep(0.5)
             
@@ -381,23 +438,37 @@ class NaverBlogBot:
             if not self.clipboard_input(title):
                 ActionChains(self.driver).send_keys(title).perform()
             
+            logger.info(f"Title entered: {title[:30]}...")
             time.sleep(1)
             
             # Step 2: 본문 입력
-            # 본문 placeholder 클릭
+            # 본문 placeholder 클릭 (.se-fs15 = 15px 폰트 = 본문)
             try:
-                content_area = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    ".se-placeholder.se-fs15, span.se-placeholder[class*='fs15']"
+                content_area = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((
+                        By.CSS_SELECTOR,
+                        "span.se-placeholder.se-fs15"
+                    ))
                 )
                 content_area.click()
-            except:
+                logger.info("Clicked content placeholder")
+            except TimeoutException:
                 # 대안: 본문 텍스트로 찾기
-                content_area = self.driver.find_element(
-                    By.XPATH, 
-                    "//span[contains(@class, 'se-placeholder') and contains(text(), '글감과')]"
-                )
-                content_area.click()
+                try:
+                    content_area = self.driver.find_element(
+                        By.XPATH, 
+                        "//span[contains(@class, 'se-placeholder') and contains(text(), '글감과')]"
+                    )
+                    content_area.click()
+                    logger.info("Clicked content placeholder (by text)")
+                except:
+                    # 대안 2: 본문 영역 직접 클릭
+                    content_component = self.driver.find_element(
+                        By.CSS_SELECTOR,
+                        ".se-component.se-text .se-text-paragraph"
+                    )
+                    content_component.click()
+                    logger.info("Clicked content component area")
             
             time.sleep(0.5)
             
@@ -405,14 +476,16 @@ class NaverBlogBot:
             if not self.clipboard_input(content):
                 ActionChains(self.driver).send_keys(content).perform()
             
+            logger.info(f"Content entered: {len(content)} characters")
             time.sleep(2)
             
             logger.info("Content written successfully")
             return True, "Content written"
             
         except TimeoutException:
-            return False, "Content area not found"
-        except NoSuchElementException:
+            return False, "Content area not found - editor may not be loaded"
+        except NoSuchElementException as e:
+            logger.error(f"Editor elements not found: {e}")
             return False, "Editor elements not found"
         except Exception as e:
             logger.error(f"Failed to write content: {e}")
@@ -426,10 +499,11 @@ class NaverBlogBot:
             category: 발행할 카테고리명 (선택사항)
         
         플로우:
-        1. 발행 버튼 클릭
-        2. 카테고리 선택 (있으면)
-        3. 즉시 발행 선택
-        4. 최종 발행 버튼 클릭
+        1. 메인 프레임으로 전환 (발행 버튼은 iframe 밖에 있음)
+        2. 발행 버튼 클릭
+        3. 카테고리 선택 (있으면)
+        4. 즉시 발행 선택
+        5. 최종 발행 버튼 클릭
         """
         if not self.driver:
             return False, "Browser not started"
@@ -440,8 +514,17 @@ class NaverBlogBot:
         try:
             logger.info("Publishing post...")
             
+            # Step 0: 메인 프레임으로 전환 (발행 버튼은 iframe 밖에 있음)
+            try:
+                self.driver.switch_to.default_content()
+                logger.info("Switched to default content for publish")
+            except:
+                pass
+            
+            time.sleep(1)
+            
             # Step 1: 발행 버튼 클릭 (상단 발행 버튼)
-            publish_btn = self.wait.until(
+            publish_btn = WebDriverWait(self.driver, 10).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR, 
                     "button.publish_btn__m9KHH, button[data-click-area='tpb.publish']"
