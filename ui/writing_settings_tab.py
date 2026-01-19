@@ -262,8 +262,8 @@ class WritingSettingsTab(QWidget):
         self.chk_auto_thumbnail.setChecked(
             self.settings.value("writing/auto_thumbnail", True, type=bool))
         
-        # 썸네일 저장 경로 (기본값: 사용자 Pictures 폴더)
-        default_path = os.path.join(os.path.expanduser("~"), "Pictures", "blog_thumbnails")
+        # 썸네일 저장 경로 (기본값: 바탕화면)
+        default_path = os.path.join(os.path.expanduser("~"), "Desktop", "blog_thumbnails")
         self.input_thumbnail_path.setText(
             self.settings.value("writing/thumbnail_path", default_path))
         
@@ -404,7 +404,7 @@ class WritingSettingsTab(QWidget):
         """썸네일 저장 경로 반환"""
         path = self.input_thumbnail_path.text().strip()
         if not path:
-            path = os.path.join(os.path.expanduser("~"), "Pictures", "blog_thumbnails")
+            path = os.path.join(os.path.expanduser("~"), "Desktop", "blog_thumbnails")
         return path
     
     def is_auto_upload_thumbnail_enabled(self) -> bool:

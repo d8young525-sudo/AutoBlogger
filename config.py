@@ -21,7 +21,7 @@ class Config:
     
     # Application Info
     APP_NAME = "Auto Blogger Pro"
-    VERSION = "3.6.2"
+    VERSION = "3.6.3"
     
     # Paths
     BASE_DIR = Path(__file__).parent.resolve()

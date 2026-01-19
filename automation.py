@@ -1,7 +1,7 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.6.2: 대표 썸네일 이미지 업로드 기능 추가
+v3.6.3: 대표 썸네일 이미지 업로드 기능 추가 및 16:9 비율 지원
 """
 import time
 import logging

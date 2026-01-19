@@ -1,10 +1,12 @@
 """
 정보성 글쓰기 탭 - 블로그 포스팅 자동 생성 기능
-v3.5.1: 썸네일을 세부설정에 통합, 재생성 2회 제한
+v3.6.3: 썸네일 자동 저장 및 대표 이미지 등록 연동
 """
 import requests
 import re
+import os
 import base64
+from datetime import datetime
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout, 
                                QComboBox, QLineEdit, QPushButton, QRadioButton, 
                                QButtonGroup, QLabel, QMessageBox, QScrollArea, 
@@ -74,7 +76,7 @@ class ImageGenerateWorker(QThread):
             payload = {
                 "mode": "generate_image",
                 "prompt": self.prompt,
-                "style": "블로그 대표 썸네일, 텍스트 없이, 주제를 잘 나타내는 시각적 이미지"
+                "style": "블로그 대표 썸네일, 텍스트 없이, 주제를 잘 나타내는 시각적 이미지, 16:9 가로 비율"
             }
             
             response = requests.post(
@@ -280,11 +282,6 @@ class InfoTab(QWidget):
         
         adv_layout.addLayout(thumb_row)
         
-        # 썸네일 사용 체크
-        self.chk_use_thumbnail = QCheckBox("✅ 이 썸네일 사용하여 발행")
-        self.chk_use_thumbnail.setEnabled(False)
-        adv_layout.addWidget(self.chk_use_thumbnail)
-        
         self.group_adv.setLayout(adv_layout)
         layout.addWidget(self.group_adv)
 
@@ -454,8 +451,6 @@ class InfoTab(QWidget):
             if new_topic and new_topic != self.current_topic_for_thumbnail:
                 self.thumbnail_image = None
                 self.thumbnail_preview.setText("썸네일 대기중...")
-                self.chk_use_thumbnail.setChecked(False)
-                self.chk_use_thumbnail.setEnabled(False)
                 
                 # 세부설정이 펼쳐져 있으면 자동 생성
                 if self.group_adv.isChecked():
@@ -591,16 +586,21 @@ class InfoTab(QWidget):
         if self.writing_settings_tab:
             category = self.writing_settings_tab.get_info_category()
         
-        # 썸네일 이미지
+        # 썸네일 이미지 (글쓰기 환경설정의 자동 업로드 설정 확인)
         thumbnail = None
-        if self.chk_use_thumbnail.isChecked() and self.thumbnail_image:
-            thumbnail = self.thumbnail_image
+        thumbnail_path = None
+        if self.writing_settings_tab and self.writing_settings_tab.is_auto_upload_thumbnail_enabled():
+            if self.thumbnail_image:
+                thumbnail = self.thumbnail_image
+                # 썸네일 파일 저장 경로
+                thumbnail_path = self._save_thumbnail_to_file()
         
         data = {
             "action": "publish_only",
             "title": title,
             "content": content,
             "category": category,
+            "thumbnail_path": thumbnail_path,
             "images": {"thumbnail": thumbnail, "illustrations": []}
         }
         self.start_signal.emit(data)
@@ -620,12 +620,43 @@ class InfoTab(QWidget):
                 pixmap = QPixmap.fromImage(qimg)
                 scaled = pixmap.scaled(200, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.thumbnail_preview.setPixmap(scaled)
-                self.chk_use_thumbnail.setEnabled(True)
-                self.chk_use_thumbnail.setChecked(True)
             except:
                 self.thumbnail_preview.setText("로드 실패")
             
             self.log_signal.emit("✅ 썸네일 이미지 생성 완료!")
+
+    def _save_thumbnail_to_file(self) -> str:
+        """썸네일 이미지를 파일로 저장하고 경로 반환"""
+        if not self.thumbnail_image:
+            return ""
+        
+        try:
+            # 저장 경로 가져오기
+            if self.writing_settings_tab:
+                save_dir = self.writing_settings_tab.get_thumbnail_path()
+            else:
+                save_dir = os.path.join(os.path.expanduser("~"), "Desktop", "blog_thumbnails")
+            
+            # 폴더 생성
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+            
+            # 파일명 생성 (타임스탬프)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"thumbnail_{timestamp}.png"
+            filepath = os.path.join(save_dir, filename)
+            
+            # base64 디코딩 후 저장
+            img_data = base64.b64decode(self.thumbnail_image)
+            with open(filepath, 'wb') as f:
+                f.write(img_data)
+            
+            self.log_signal.emit(f"📁 썸네일 저장: {filepath}")
+            return filepath
+            
+        except Exception as e:
+            self.log_signal.emit(f"⚠️ 썸네일 저장 실패: {str(e)}")
+            return ""
 
     def on_thumbnail_error(self, error_msg: str):
         """썸네일 생성 에러"""
