@@ -531,6 +531,89 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                 )
 
         # ============================================
+        # [모드 1.5] 키워드 기반 주제 추천
+        # ============================================
+        elif mode == "recommend_by_keywords":
+            keywords = req_json.get("keywords", [])
+            
+            if not keywords:
+                return https_fn.Response(
+                    json.dumps({"error": "키워드가 필요합니다."}),
+                    status=400,
+                    mimetype="application/json"
+                )
+            
+            keywords_str = ", ".join(keywords)
+            context = get_dynamic_context()
+            
+            prompt = f"""
+            [키워드 기반 블로그 주제 추천]
+            
+            사용자가 제공한 키워드: {keywords_str}
+            
+            [오늘의 컨텍스트]
+            - 날짜: {context['date']} ({context['weekday']}요일)
+            - 계절: {context['season']}
+            
+            [TASK] 위 키워드들을 조합하거나 관련된 주제로 블로그 포스팅 제목 5개를 추천해주세요.
+            
+            [조건]
+            - 키워드와 직접적으로 관련된 구체적인 주제
+            - 검색 유입이 잘 될 수 있는 SEO 최적화 제목
+            - 독자가 클릭하고 싶어하는 호기심 자극 제목
+            - {context['season']}철 트렌드 반영 1개 이상
+            - 너무 일반적인 제목 지양 (구체적인 숫자, 비교, 사례 포함)
+            
+            [예시]
+            키워드: 엔진오일, 교체주기
+            → "엔진오일 5,000km vs 10,000km 교체, 2026년 정답은?"
+            
+            키워드: 자동차관리, 겨울
+            → "겨울철 자동차 관리 체크리스트 7가지, 놓치면 큰일!"
+            
+            반드시 아래 JSON 형식으로만 응답하세요:
+            {{"topics": ["주제1", "주제2", "주제3", "주제4", "주제5"]}}
+            """
+            
+            logging.info(f"Keyword recommend request - keywords: {keywords_str}")
+            
+            resp = client.models.generate_content(
+                model=MODEL_NAME, 
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    temperature=0.8
+                )
+            )
+            
+            raw_text = resp.text.replace("```json", "").replace("```", "").strip()
+            
+            try:
+                start_idx = raw_text.find('{')
+                end_idx = raw_text.rfind('}') + 1
+                if start_idx != -1 and end_idx > start_idx:
+                    json_str = raw_text[start_idx:end_idx]
+                    parsed = json.loads(json_str)
+                    return https_fn.Response(
+                        json.dumps(parsed), 
+                        status=200, 
+                        mimetype="application/json"
+                    )
+                else:
+                    return https_fn.Response(
+                        json.dumps({"topics": ["키워드 기반 주제를 다시 생성해주세요"]}), 
+                        status=200, 
+                        mimetype="application/json"
+                    )
+            except json.JSONDecodeError as e:
+                logging.error(f"JSON parse error in keyword recommend: {e}")
+                return https_fn.Response(
+                    json.dumps({"topics": ["주제 생성 중 오류가 발생했습니다."]}), 
+                    status=200, 
+                    mimetype="application/json"
+                )
+
+        # ============================================
         # [모드 2] 주제 분석 (Grounding 적용)
         # ============================================
         elif mode == "analyze":
@@ -879,30 +962,37 @@ REMINDER: NO TEXT - use only visual symbols, icons, and shapes. No labels or cap
             summary = req_json.get("summary", "")
             insight = req_json.get("insight", "")
             
-            # 인사말/마무리말 (prompt에서 추출)
-            prompt_text = req_json.get("prompt", "")
-            intro = ""
-            outro = ""
-            if "인사말:" in prompt_text:
-                try:
-                    intro_part = prompt_text.split("인사말:")[1]
-                    intro = intro_part.split("맺음말:")[0].strip() if "맺음말:" in intro_part else intro_part.strip()
-                except:
-                    pass
-            if "맺음말:" in prompt_text:
-                try:
-                    outro = prompt_text.split("맺음말:")[1].strip()
-                except:
-                    pass
+            # 인사말/마무리말 (직접 전달받거나 prompt에서 추출)
+            intro = req_json.get("intro", "")
+            outro = req_json.get("outro", "")
             
-            # 출력 스타일 설정
+            # 구버전 호환: prompt에서 추출
+            if not intro or not outro:
+                prompt_text = req_json.get("prompt", "")
+                if "인사말:" in prompt_text:
+                    try:
+                        intro_part = prompt_text.split("인사말:")[1]
+                        intro = intro_part.split("맺음말:")[0].strip() if "맺음말:" in intro_part else intro_part.strip()
+                    except:
+                        pass
+                if "맺음말:" in prompt_text:
+                    try:
+                        outro = prompt_text.split("맺음말:")[1].strip()
+                    except:
+                        pass
+            
+            # 출력 스타일 설정 (텍스트 전용으로 변경)
             output_style = req_json.get("output_style", {})
-            if isinstance(output_style, list):
+            if isinstance(output_style, (list, str)):
                 output_style = {}
             
-            text_style = output_style.get("text", {}) if isinstance(output_style, dict) else {}
-            md_style = output_style.get("markdown", {}) if isinstance(output_style, dict) else {}
-            html_style = output_style.get("html", {}) if isinstance(output_style, dict) else {}
+            # 텍스트 스타일 기본값 설정
+            heading_style = output_style.get("heading", "【 】 대괄호")
+            emphasis_style = output_style.get("emphasis", "「강조」 꺽쇠괄호")
+            divider_style = output_style.get("divider", "━━━━━━━━ (실선)")
+            spacing_style = output_style.get("spacing", "기본 (빈 줄 1개)")
+            qa_style = output_style.get("qa", "Q. 질문 / A. 답변")
+            list_style = output_style.get("list", "• 불릿 기호")
             
             # 이미지 정보 처리 (호환성)
             images = req_json.get("images", {})
@@ -958,20 +1048,25 @@ REMINDER: NO TEXT - use only visual symbols, icons, and shapes. No labels or cap
             
             {outro_instruction}
             
-            [OUTPUT STYLE PREFERENCES]
-            TEXT 형식: 소제목={text_style.get('heading', '【 】 대괄호')}, 강조={text_style.get('emphasis', '** 별표 **')}
-            Markdown 형식: 헤딩={md_style.get('heading', '## H2 사용')}, Q&A={md_style.get('qa', '> 인용문 스타일')}
-            HTML 형식: 제목={html_style.get('title', '<h2> 태그')}, 색상={html_style.get('color', '네이버 그린 (#03C75A)')}
-            - HTML에서는 이모지를 절대 사용하지 마세요!
+            [TEXT STYLE - 반드시 적용]
+            - 소제목 스타일: {heading_style}
+            - 강조 표현: {emphasis_style}
+            - 구분선: {divider_style}
+            - 문단 간격: {spacing_style}
+            - Q&A 표현: {qa_style}
+            - 목록 기호: {list_style}
             
-            [OUTPUT FORMAT - STRICT JSON]
+            [OUTPUT FORMAT]
+            네이버 블로그 에디터에 바로 붙여넣을 수 있는 순수 텍스트 형식으로 작성하세요.
+            - Markdown 문법 사용 금지 (**, ##, - 등)
+            - HTML 태그 사용 금지
+            - 위에서 지정한 텍스트 스타일만 사용
+            
             반드시 아래 형식의 JSON을 출력하세요:
             {{
                 "title": "SEO 최적화된 매력적인 제목",
-                "content": "본문 전체 (줄바꿈 포함)",
-                "content_text": "TEXT 형식 본문 (위 스타일 적용)",
-                "content_md": "Markdown 형식 본문",
-                "content_html": "HTML 형식 본문"
+                "content": "순수 텍스트 형식 본문 (위 스타일 적용)",
+                "content_text": "순수 텍스트 형식 본문 (content와 동일)"
             }}
             
             [IMPORTANT]
@@ -979,6 +1074,7 @@ REMINDER: NO TEXT - use only visual symbols, icons, and shapes. No labels or cap
             - 실용적이고 구체적인 정보 제공
             - 독자가 바로 활용할 수 있는 팁 포함
             - 최소 {char_count}자 이상 작성
+            - JSON 형식 외의 텍스트 출력 금지
             """
 
             # Grounding with Google Search로 최신 정보 반영
@@ -1002,15 +1098,11 @@ REMINDER: NO TEXT - use only visual symbols, icons, and shapes. No labels or cap
                 else:
                     raise json.JSONDecodeError("No JSON found", raw_text, 0)
                 
-                # content 키 호환성 처리
+                # content 키 호환성 처리 (텍스트 전용)
                 if "content" not in data:
                     data["content"] = data.get("content_text", data.get("body", "내용 생성 실패"))
                 if "content_text" not in data:
                     data["content_text"] = data.get("content", "")
-                if "content_md" not in data: 
-                    data["content_md"] = data["content_text"]
-                if "content_html" not in data: 
-                    data["content_html"] = f"<p>{data['content_text']}</p>"
                 
                 return https_fn.Response(
                     json.dumps(data), 

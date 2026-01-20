@@ -139,87 +139,87 @@ class WritingSettingsTab(QWidget):
         group_thumbnail.setLayout(thumb_layout)
         layout.addWidget(group_thumbnail)
         
-        # ========== 4. 출력 스타일 설정 ==========
+        # ========== 4. 출력 스타일 설정 (텍스트 전용) ==========
         group_output = QGroupBox("🎨 출력 스타일 설정")
         output_layout = QVBoxLayout()
         
-        output_desc = QLabel("생성되는 글의 포맷별 스타일을 설정합니다.")
+        output_desc = QLabel("생성되는 글의 텍스트 스타일을 설정합니다.\n네이버 블로그 에디터에 맞춰 순수 텍스트 형식으로 생성됩니다.")
         output_desc.setStyleSheet("color: #666; font-size: 11px;")
         output_layout.addWidget(output_desc)
         
-        self.output_tabs = QTabWidget()
+        text_form = QFormLayout()
         
-        # TEXT 설정 탭
-        text_widget = QWidget()
-        text_layout = QFormLayout(text_widget)
-        
+        # 소제목 스타일
         self.combo_text_heading = QComboBox()
-        self.combo_text_heading.addItems(["【 】 대괄호", "▶ 화살표", "● 원형", "■ 사각형", "※ 꽃표"])
-        text_layout.addRow("소제목 스타일:", self.combo_text_heading)
+        self.combo_text_heading.addItems([
+            "【 】 대괄호", 
+            "▶ 화살표", 
+            "● 원형 불릿", 
+            "■ 사각형", 
+            "★ 별표",
+            "— 대시",
+            "본문과 동일 (구분 없음)"
+        ])
+        text_form.addRow("소제목 스타일:", self.combo_text_heading)
         
+        # 강조 표현
         self.combo_text_emphasis = QComboBox()
-        self.combo_text_emphasis.addItems(["** 별표 **", "「 」 꺽쇠", "★ ~ ★", "밑줄 ___"])
-        text_layout.addRow("강조 표현:", self.combo_text_emphasis)
+        self.combo_text_emphasis.addItems([
+            "「강조」 꺽쇠괄호", 
+            "'강조' 작은따옴표", 
+            "\"강조\" 큰따옴표",
+            "*강조* 별표",
+            "강조 없음 (일반 텍스트)"
+        ])
+        text_form.addRow("강조 표현:", self.combo_text_emphasis)
         
+        # 구분선
         self.combo_text_divider = QComboBox()
-        self.combo_text_divider.addItems(["━━━━━━ (실선)", "- - - - - (점선)", "═══════ (이중선)", "빈 줄만"])
-        text_layout.addRow("구분선:", self.combo_text_divider)
+        self.combo_text_divider.addItems([
+            "━━━━━━━━ (실선)", 
+            "- - - - - - - - (점선)", 
+            "════════ (이중선)", 
+            "빈 줄 2개",
+            "구분선 없음"
+        ])
+        text_form.addRow("구분선:", self.combo_text_divider)
         
+        # 문단 간격
         self.combo_text_spacing = QComboBox()
-        self.combo_text_spacing.addItems(["기본 (1줄)", "넓게 (2줄)", "좁게 (줄바꿈만)"])
-        text_layout.addRow("문단 간격:", self.combo_text_spacing)
+        self.combo_text_spacing.addItems([
+            "기본 (빈 줄 1개)", 
+            "넓게 (빈 줄 2개)", 
+            "좁게 (줄바꿈만)"
+        ])
+        text_form.addRow("문단 간격:", self.combo_text_spacing)
         
-        self.output_tabs.addTab(text_widget, "📄 Text")
+        # Q&A 스타일
+        self.combo_text_qa = QComboBox()
+        self.combo_text_qa.addItems([
+            "Q. 질문 / A. 답변",
+            "❓ 질문 / ✔️ 답변",
+            "▶ 질문 / → 답변",
+            "일반 문단 (구분 없음)"
+        ])
+        text_form.addRow("Q&A 스타일:", self.combo_text_qa)
         
-        # MARKDOWN 설정 탭
-        md_widget = QWidget()
-        md_layout = QFormLayout(md_widget)
+        # 목록 기호
+        self.combo_text_list = QComboBox()
+        self.combo_text_list.addItems([
+            "• 불릿 기호",
+            "- 하이픈",
+            "▸ 삼각형",
+            "1. 2. 3. 숫자",
+            "① ② ③ 원문자"
+        ])
+        text_form.addRow("목록 기호:", self.combo_text_list)
         
-        self.combo_md_heading = QComboBox()
-        self.combo_md_heading.addItems(["## H2 사용", "### H3 사용", "**굵게** 사용"])
-        md_layout.addRow("헤딩 레벨:", self.combo_md_heading)
+        output_layout.addLayout(text_form)
         
-        self.combo_md_list = QComboBox()
-        self.combo_md_list.addItems(["- 하이픈", "* 별표", "1. 숫자"])
-        md_layout.addRow("목록 기호:", self.combo_md_list)
+        output_notice = QLabel("💡 설정한 스타일은 AI 글 생성 시 자동으로 적용됩니다.")
+        output_notice.setStyleSheet("color: #888; font-size: 11px; margin-top: 10px;")
+        output_layout.addWidget(output_notice)
         
-        self.combo_md_qa = QComboBox()
-        self.combo_md_qa.addItems(["> 인용문 스타일", "**Q:** 굵게 스타일", "### Q: 헤딩 스타일"])
-        md_layout.addRow("Q&A 표현:", self.combo_md_qa)
-        
-        self.combo_md_narrative = QComboBox()
-        self.combo_md_narrative.addItems(["짧은 문장 (모바일 최적화)", "긴 문장 (PC 최적화)"])
-        md_layout.addRow("서술 방식:", self.combo_md_narrative)
-        
-        self.output_tabs.addTab(md_widget, "📝 Markdown")
-        
-        # HTML 설정 탭
-        html_widget = QWidget()
-        html_layout = QFormLayout(html_widget)
-        
-        self.combo_html_title = QComboBox()
-        self.combo_html_title.addItems(["<h2> 태그", "<h3> 태그", "<strong> 굵게만"])
-        html_layout.addRow("제목 스타일:", self.combo_html_title)
-        
-        self.combo_html_qa = QComboBox()
-        self.combo_html_qa.addItems(["<blockquote> 인용", "<div class='qa'> 커스텀", "<details> 접기형"])
-        html_layout.addRow("Q&A 스타일:", self.combo_html_qa)
-        
-        self.combo_html_color = QComboBox()
-        self.combo_html_color.addItems(["네이버 그린 (#03C75A)", "블루 (#4A90E2)", "오렌지 (#F39C12)", "그레이 (#666)"])
-        html_layout.addRow("테마 컬러:", self.combo_html_color)
-        
-        self.combo_html_font = QComboBox()
-        self.combo_html_font.addItems(["기본 (시스템)", "나눔고딕", "맑은 고딕"])
-        html_layout.addRow("본문 폰트:", self.combo_html_font)
-        
-        self.combo_html_box = QComboBox()
-        self.combo_html_box.addItems(["배경색 박스", "테두리 박스", "없음"])
-        html_layout.addRow("강조 박스:", self.combo_html_box)
-        
-        self.output_tabs.addTab(html_widget, "🌐 HTML")
-        
-        output_layout.addWidget(self.output_tabs)
         group_output.setLayout(output_layout)
         layout.addWidget(group_output)
         
@@ -275,8 +275,7 @@ class WritingSettingsTab(QWidget):
         self._load_output_style_settings()
     
     def _load_output_style_settings(self):
-        """출력 스타일 설정 로드"""
-        # Text 설정
+        """출력 스타일 설정 로드 (텍스트 전용)"""
         self.combo_text_heading.setCurrentIndex(
             self.settings.value("writing/style_text_heading", 0, type=int))
         self.combo_text_emphasis.setCurrentIndex(
@@ -285,28 +284,10 @@ class WritingSettingsTab(QWidget):
             self.settings.value("writing/style_text_divider", 0, type=int))
         self.combo_text_spacing.setCurrentIndex(
             self.settings.value("writing/style_text_spacing", 0, type=int))
-        
-        # Markdown 설정
-        self.combo_md_heading.setCurrentIndex(
-            self.settings.value("writing/style_md_heading", 0, type=int))
-        self.combo_md_list.setCurrentIndex(
-            self.settings.value("writing/style_md_list", 0, type=int))
-        self.combo_md_qa.setCurrentIndex(
-            self.settings.value("writing/style_md_qa", 0, type=int))
-        self.combo_md_narrative.setCurrentIndex(
-            self.settings.value("writing/style_md_narrative", 0, type=int))
-        
-        # HTML 설정
-        self.combo_html_title.setCurrentIndex(
-            self.settings.value("writing/style_html_title", 0, type=int))
-        self.combo_html_qa.setCurrentIndex(
-            self.settings.value("writing/style_html_qa", 0, type=int))
-        self.combo_html_color.setCurrentIndex(
-            self.settings.value("writing/style_html_color", 0, type=int))
-        self.combo_html_font.setCurrentIndex(
-            self.settings.value("writing/style_html_font", 0, type=int))
-        self.combo_html_box.setCurrentIndex(
-            self.settings.value("writing/style_html_box", 0, type=int))
+        self.combo_text_qa.setCurrentIndex(
+            self.settings.value("writing/style_text_qa", 0, type=int))
+        self.combo_text_list.setCurrentIndex(
+            self.settings.value("writing/style_text_list", 0, type=int))
     
     def save_settings(self):
         """설정 저장"""
@@ -337,8 +318,7 @@ class WritingSettingsTab(QWidget):
         QMessageBox.information(self, "완료", "글쓰기 설정이 저장되었습니다.")
     
     def _save_output_style_settings(self):
-        """출력 스타일 설정 저장"""
-        # Text 설정
+        """출력 스타일 설정 저장 (텍스트 전용)"""
         self.settings.setValue("writing/style_text_heading", 
                                self.combo_text_heading.currentIndex())
         self.settings.setValue("writing/style_text_emphasis", 
@@ -347,28 +327,10 @@ class WritingSettingsTab(QWidget):
                                self.combo_text_divider.currentIndex())
         self.settings.setValue("writing/style_text_spacing", 
                                self.combo_text_spacing.currentIndex())
-        
-        # Markdown 설정
-        self.settings.setValue("writing/style_md_heading", 
-                               self.combo_md_heading.currentIndex())
-        self.settings.setValue("writing/style_md_list", 
-                               self.combo_md_list.currentIndex())
-        self.settings.setValue("writing/style_md_qa", 
-                               self.combo_md_qa.currentIndex())
-        self.settings.setValue("writing/style_md_narrative", 
-                               self.combo_md_narrative.currentIndex())
-        
-        # HTML 설정
-        self.settings.setValue("writing/style_html_title", 
-                               self.combo_html_title.currentIndex())
-        self.settings.setValue("writing/style_html_qa", 
-                               self.combo_html_qa.currentIndex())
-        self.settings.setValue("writing/style_html_color", 
-                               self.combo_html_color.currentIndex())
-        self.settings.setValue("writing/style_html_font", 
-                               self.combo_html_font.currentIndex())
-        self.settings.setValue("writing/style_html_box", 
-                               self.combo_html_box.currentIndex())
+        self.settings.setValue("writing/style_text_qa", 
+                               self.combo_text_qa.currentIndex())
+        self.settings.setValue("writing/style_text_list", 
+                               self.combo_text_list.currentIndex())
     
     # ========== 외부에서 호출하는 Getter 메서드들 ==========
     
@@ -424,25 +386,12 @@ class WritingSettingsTab(QWidget):
             self.input_thumbnail_path.setText(folder)
     
     def get_output_style_settings(self) -> dict:
-        """출력 스타일 설정값 반환"""
+        """출력 스타일 설정값 반환 (텍스트 전용)"""
         return {
-            "text": {
-                "heading": self.combo_text_heading.currentText(),
-                "emphasis": self.combo_text_emphasis.currentText(),
-                "divider": self.combo_text_divider.currentText(),
-                "spacing": self.combo_text_spacing.currentText(),
-            },
-            "markdown": {
-                "heading": self.combo_md_heading.currentText(),
-                "list": self.combo_md_list.currentText(),
-                "qa": self.combo_md_qa.currentText(),
-                "narrative": self.combo_md_narrative.currentText(),
-            },
-            "html": {
-                "title": self.combo_html_title.currentText(),
-                "qa": self.combo_html_qa.currentText(),
-                "color": self.combo_html_color.currentText(),
-                "font": self.combo_html_font.currentText(),
-                "box": self.combo_html_box.currentText(),
-            }
+            "heading": self.combo_text_heading.currentText(),
+            "emphasis": self.combo_text_emphasis.currentText(),
+            "divider": self.combo_text_divider.currentText(),
+            "spacing": self.combo_text_spacing.currentText(),
+            "qa": self.combo_text_qa.currentText(),
+            "list": self.combo_text_list.currentText(),
         }

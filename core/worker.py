@@ -111,22 +111,23 @@ class AutomationWorker(QThread):
         else:
             emoji_inst = "이모지 사용 안 함"
 
-        # Build request payload
+        # 스타일 옵션 가져오기
+        style_options = self.data.get('style_options', {})
+        
+        # Build request payload (API 스펙에 맞게)
         prompt_payload = {
             "mode": "write",
             "topic": topic,
-            "prompt": f"""
-                타겟: {", ".join(self.data.get('targets', []))}
-                질문: {" / ".join(self.data.get('questions', []))}
-                요약: {self.data.get('summary', '')}
-                인사이트: {self.data.get('insight', '')}
-                말투: {self.data.get('tone', '친근한 이웃 (해요체)')}
-                분량: {self.data.get('length', '보통 (1,500자)')}
-                이모지: {emoji_inst}
-                인사말: {self.settings.get('intro', '')}
-                맺음말: {self.settings.get('outro', '')}
-            """,
-            "style_options": str(self.data.get('style_options', {}))
+            "targets": self.data.get('targets', []),
+            "questions": self.data.get('questions', []),
+            "summary": self.data.get('summary', ''),
+            "insight": self.data.get('insight', ''),
+            "tone": self.data.get('tone', '친근한 이웃 (해요체)'),
+            "length": self.data.get('length', '보통 (1,500자)'),
+            "emoji_level": self.data.get('emoji_level', '사용 안 함'),
+            "intro": self.settings.get('intro', ''),
+            "outro": self.settings.get('outro', ''),
+            "output_style": style_options,  # 출력 스타일 설정
         }
 
         try:
