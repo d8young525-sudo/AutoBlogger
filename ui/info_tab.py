@@ -76,7 +76,7 @@ class ImageGenerateWorker(QThread):
             payload = {
                 "mode": "generate_image",
                 "prompt": self.prompt,
-                "style": "블로그 대표 썸네일, 글자/텍스트/문자 절대 없이 순수 이미지만, 주제를 잘 나타내는 시각적 이미지, 16:9 가로 비율"
+                "style": "블로그 대표 썸네일, 텍스트 없이, 주제를 잘 나타내는 시각적 이미지, 16:9 가로 비율"
             }
             
             response = requests.post(

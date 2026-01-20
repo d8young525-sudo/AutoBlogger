@@ -336,6 +336,52 @@ def build_dynamic_recommend_prompt(category: str, context: dict) -> str:
     return prompt
 
 
+def convert_topic_to_visual_description(client, model_name: str, topic: str) -> str:
+    """
+    한국어 주제를 영어 시각적 설명으로 변환
+    이미지 생성 시 한국어 텍스트가 이미지에 들어가는 것을 방지
+    """
+    try:
+        conversion_prompt = f"""
+You are a visual description translator. Convert the following Korean blog topic into a detailed English visual description for image generation.
+
+Korean topic: {topic}
+
+IMPORTANT RULES:
+1. DO NOT include any text, words, or letters in the description
+2. Describe only VISUAL ELEMENTS: objects, scenes, colors, composition, mood
+3. Focus on what can be PHOTOGRAPHED or ILLUSTRATED
+4. Be specific about visual details (lighting, angle, atmosphere)
+5. Output ONLY the English visual description, nothing else
+
+Example:
+- Input: "겨울철 와이퍼 관리법"
+- Output: "A car windshield with clean wiper blades on a snowy winter day, frost crystals on glass, cold blue morning light, close-up angle showing the rubber blade detail"
+
+- Input: "엔진오일 교체주기"
+- Output: "A mechanic's gloved hand pouring golden engine oil from a bottle into a car engine, workshop setting with warm lighting, oil droplets catching light, clean professional environment"
+
+Now convert this topic into a visual description:
+"""
+        
+        resp = client.models.generate_content(
+            model=model_name,
+            contents=conversion_prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3  # 낮은 온도로 일관된 결과
+            )
+        )
+        
+        visual_desc = resp.text.strip()
+        logging.info(f"Topic '{topic}' converted to visual: {visual_desc[:100]}...")
+        return visual_desc
+        
+    except Exception as e:
+        logging.error(f"Failed to convert topic to visual description: {e}")
+        # 실패 시 기본 설명 반환
+        return f"Professional photograph related to automotive topic, clean composition, natural lighting"
+
+
 @https_fn.on_request(
     region="asia-northeast3", 
     timeout_sec=300, 
@@ -589,14 +635,82 @@ def generate_blog_post(req: https_fn.Request) -> https_fn.Response:
                     mimetype="application/json"
                 )
             
-            # 스타일별 프롬프트 구성
+            # 2단계 프롬프트 생성: 먼저 주제를 시각적 설명으로 변환
+            # 한국어 주제가 이미지에 텍스트로 들어가는 것을 방지
+            visual_description = convert_topic_to_visual_description(client, MODEL_NAME, image_prompt)
+            
+            # 스타일별 프롬프트 구성 - 텍스트 제거 강화
+            base_no_text_instruction = """
+CRITICAL REQUIREMENTS:
+- ABSOLUTELY NO TEXT, LETTERS, WORDS, NUMBERS, SYMBOLS, or CHARACTERS of any kind in the image
+- Do NOT render any Korean, English, Chinese, or any language text
+- Do NOT include any typography, labels, watermarks, or signs
+- Pure visual imagery only - photograph style without any overlays
+- If you feel tempted to add text, DO NOT - leave that space empty or fill with visual elements
+"""
+            
             style_prompts = {
-                "블로그 썸네일": f"Create a professional blog thumbnail image for: '{image_prompt}'. Style: Clean, modern, minimal design with soft colors. No text. High quality, 16:9 aspect ratio.",
-                "블로그 대표 썸네일, 텍스트 없이, 주제를 잘 나타내는 시각적 이미지": f"Create a beautiful, eye-catching blog thumbnail for: '{image_prompt}'. Professional photography style, vibrant but not overwhelming colors, NO TEXT or letters anywhere in the image. Clean composition, 16:9 ratio.",
-                "블로그 본문 삽화, 텍스트 없이, 심플하고 깔끔한 일러스트레이션": f"Create a simple, clean illustration for blog article about: '{image_prompt}'. Style: Flat design, minimal, modern illustration. NO TEXT. Soft pastel colors. Square format.",
-                "자동차": f"Create a professional automotive image for: '{image_prompt}'. Style: Sleek, modern car photography. Professional lighting.",
-                "출고 후기": f"Create a warm, celebratory car delivery image for: '{image_prompt}'. Style: Happy customer receiving new car. Bright and positive mood.",
-                "인포그래픽": f"Create an infographic-style image about: '{image_prompt}'. Style: Informative, organized with icons and visual elements."
+                "블로그 썸네일": f"""
+{base_no_text_instruction}
+
+Create a professional blog thumbnail photograph.
+Visual concept: {visual_description}
+Style: Clean, modern, minimal design with soft natural colors. Professional photography with shallow depth of field. 16:9 landscape aspect ratio.
+Mood: Professional, inviting, trustworthy.
+
+REMINDER: NO TEXT WHATSOEVER in the image.
+""",
+                "블로그 대표 썸네일, 텍스트 없이, 주제를 잘 나타내는 시각적 이미지, 16:9 가로 비율": f"""
+{base_no_text_instruction}
+
+Create a beautiful, eye-catching blog thumbnail photograph.
+Visual concept: {visual_description}
+Style: Professional photography, vibrant but balanced colors, clean composition.
+Aspect ratio: 16:9 landscape (wide format).
+Lighting: Natural, soft lighting with gentle shadows.
+
+REMINDER: ZERO TEXT - this means no letters, no words, no numbers, no symbols. Pure photography only.
+""",
+                "블로그 본문 삽화, 텍스트 없이, 심플하고 깔끔한 일러스트레이션": f"""
+{base_no_text_instruction}
+
+Create a simple, clean illustration.
+Visual concept: {visual_description}
+Style: Flat design, minimal modern illustration. Soft pastel colors.
+Format: Square composition.
+
+REMINDER: NO TEXT - pure illustration only, no labels or captions.
+""",
+                "자동차": f"""
+{base_no_text_instruction}
+
+Create a professional automotive photograph.
+Visual concept: {visual_description}
+Style: Sleek, modern car photography. Studio or outdoor setting with professional lighting.
+Mood: Premium, sophisticated.
+
+REMINDER: NO TEXT on the image - no brand names, no labels, no overlays.
+""",
+                "출고 후기": f"""
+{base_no_text_instruction}
+
+Create a warm car delivery celebration photograph.
+Visual concept: {visual_description}
+Style: Candid photography style. Happy moment of receiving a new car.
+Mood: Bright, positive, celebratory.
+
+REMINDER: NO TEXT - no dealership names, no signs, no congratulation text.
+""",
+                "인포그래픽": f"""
+{base_no_text_instruction}
+
+Create a visual infographic-style image using only icons and visual elements.
+Visual concept: {visual_description}
+Style: Clean icons, visual diagrams, flowchart shapes WITHOUT any text labels.
+Use arrows, shapes, and pictograms to convey information visually.
+
+REMINDER: NO TEXT - use only visual symbols, icons, and shapes. No labels or captions.
+"""
             }
             
             full_prompt = style_prompts.get(style, style_prompts["블로그 썸네일"])
