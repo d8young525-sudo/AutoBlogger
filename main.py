@@ -306,9 +306,15 @@ def run_gui():
         
         def closeEvent(self, event):
             """Handle window close"""
+            # 자동화 워커 정리
             if self.worker and self.worker.isRunning():
                 self.worker.cancel()
                 self.worker.wait(3000)
+            
+            # 정보성 글쓰기 탭의 워커들 정리
+            if hasattr(self, 'tab_info') and self.tab_info:
+                self.tab_info.cleanup_workers()
+            
             event.accept()
 
     # Run application

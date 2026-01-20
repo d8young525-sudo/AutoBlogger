@@ -1,6 +1,6 @@
 """
 정보성 글쓰기 탭 - 블로그 포스팅 자동 생성 기능
-v3.6.3: 썸네일 자동 저장 및 대표 이미지 등록 연동
+v3.6.4: 세부설정 항상 활성화, 썸네일 글씨 제거, QThread 크래시 수정
 """
 import requests
 import re
@@ -76,7 +76,7 @@ class ImageGenerateWorker(QThread):
             payload = {
                 "mode": "generate_image",
                 "prompt": self.prompt,
-                "style": "블로그 대표 썸네일, 텍스트 없이, 주제를 잘 나타내는 시각적 이미지, 16:9 가로 비율"
+                "style": "블로그 대표 썸네일, 글자/텍스트/문자 절대 없이 순수 이미지만, 주제를 잘 나타내는 시각적 이미지, 16:9 가로 비율"
             }
             
             response = requests.post(
@@ -123,6 +123,17 @@ class InfoTab(QWidget):
         self.max_regenerate_count = 2  # 최대 재생성 횟수
         
         self.init_ui()
+    
+    def cleanup_workers(self):
+        """실행 중인 워커 스레드 정리 (앱 종료 시 호출)"""
+        workers = [self.recommend_worker, self.analysis_worker, self.thumbnail_worker]
+        for worker in workers:
+            if worker and worker.isRunning():
+                worker.quit()
+                worker.wait(1000)  # 최대 1초 대기
+                if worker.isRunning():
+                    worker.terminate()
+                    worker.wait()
 
     def set_auth_token(self, token: str):
         """인증 토큰 설정"""
@@ -200,11 +211,8 @@ class InfoTab(QWidget):
         group_topic.setLayout(topic_layout)
         layout.addWidget(group_topic)
 
-        # ========== 2. 세부 설정 ==========
+        # ========== 2. 세부 설정 (항상 활성화) ==========
         self.group_adv = QGroupBox("2. 세부 설정")
-        self.group_adv.setCheckable(True)
-        self.group_adv.setChecked(False)
-        self.group_adv.toggled.connect(self.on_detail_settings_toggled)
         adv_layout = QVBoxLayout()
         
         self.btn_analyze = QPushButton("🔍 주제 분석하기 (타겟/질문 추출)")
@@ -322,22 +330,6 @@ class InfoTab(QWidget):
         main_layout.addWidget(scroll)
         self.setLayout(main_layout)
 
-    def on_detail_settings_toggled(self, checked: bool):
-        """세부 설정 펼침/접힘 시 호출"""
-        if checked:
-            # 세부 설정을 펼칠 때 썸네일 자동 생성
-            topic = self.get_selected_topic()
-            if topic:
-                # 주제가 변경되었는지 확인
-                if topic != self.current_topic_for_thumbnail:
-                    self.current_topic_for_thumbnail = topic
-                    self.thumbnail_regenerate_count = 0
-                    self.update_regenerate_count_label()
-                    self.generate_thumbnail_auto()
-                elif not self.thumbnail_image:
-                    # 같은 주제인데 썸네일이 없으면 생성
-                    self.generate_thumbnail_auto()
-
     def generate_thumbnail_auto(self):
         """썸네일 자동 생성 (세부설정 펼칠 때)"""
         if not self.auth_token:
@@ -446,18 +438,17 @@ class InfoTab(QWidget):
     def on_topic_changed(self, checked: bool):
         """주제 변경 시 호출"""
         if checked:
-            # 주제가 변경되면 썸네일 관련 상태 초기화
+            # 주제가 변경되면 썸네일 관련 상태 초기화 및 자동 생성
             new_topic = self.get_selected_topic()
             if new_topic and new_topic != self.current_topic_for_thumbnail:
                 self.thumbnail_image = None
                 self.thumbnail_preview.setText("썸네일 대기중...")
                 
-                # 세부설정이 펼쳐져 있으면 자동 생성
-                if self.group_adv.isChecked():
-                    self.current_topic_for_thumbnail = new_topic
-                    self.thumbnail_regenerate_count = 0
-                    self.update_regenerate_count_label()
-                    self.generate_thumbnail_auto()
+                # 썸네일 자동 생성
+                self.current_topic_for_thumbnail = new_topic
+                self.thumbnail_regenerate_count = 0
+                self.update_regenerate_count_label()
+                self.generate_thumbnail_auto()
 
     def on_recommend_error(self, error_msg: str):
         """추천 에러"""
