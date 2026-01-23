@@ -300,40 +300,24 @@ class WritingSettingsTab(QWidget):
         sticker_group = QGroupBox("🎨 스티커 설정 (이모지 대체)")
         sticker_layout = QVBoxLayout()
         
-        sticker_desc = QLabel("글 생성 시 이모지(🚗, 💡 등) 대신 네이버 에디터 기본 스티커를 사용합니다.\n스티커를 사용하면 더 자연스럽고 네이버 블로그 친화적인 글이 됩니다.")
+        sticker_desc = QLabel("글 생성 시 이모지(🚗, 💡 등) 대신 네이버 에디터 기본 스티커를 사용합니다.")
         sticker_desc.setStyleSheet("color: #666; font-size: 11px;")
         sticker_desc.setWordWrap(True)
         sticker_layout.addWidget(sticker_desc)
         
-        self.chk_use_sticker = QCheckBox("이모지 대신 네이버 스티커 사용")
-        self.chk_use_sticker.setChecked(True)
-        sticker_layout.addWidget(self.chk_use_sticker)
-        
         sticker_form = QFormLayout()
-        self.combo_sticker_pack = QComboBox()
-        self.combo_sticker_pack.addItems([
-            "기본 스티커 (심플)",
-            "라인프렌즈 (브라운/코니)",
-            "이모티콘 스타일",
-            "귀여운 동물 스티커",
-            "감정 표현 스티커"
-        ])
-        sticker_form.addRow("스티커 팩:", self.combo_sticker_pack)
         
         self.combo_sticker_frequency = QComboBox()
         self.combo_sticker_frequency.addItems([
-            "적게 사용 (소제목에만)",
+            "사용 안함",
+            "적게 (소제목에만)",
             "보통 (소제목 + 강조)",
-            "많이 사용 (문단마다)"
+            "많이 (문단마다)"
         ])
-        self.combo_sticker_frequency.setCurrentIndex(1)
-        sticker_form.addRow("사용 빈도:", self.combo_sticker_frequency)
+        self.combo_sticker_frequency.setCurrentIndex(2)  # 보통이 기본
+        sticker_form.addRow("스티커 사용:", self.combo_sticker_frequency)
         
         sticker_layout.addLayout(sticker_form)
-        
-        sticker_notice = QLabel("💡 스티커는 글의 시각적 매력을 높이고 가독성을 향상시킵니다.")
-        sticker_notice.setStyleSheet("color: #888; font-size: 11px; margin-top: 5px;")
-        sticker_layout.addWidget(sticker_notice)
         
         sticker_group.setLayout(sticker_layout)
         naver_style_layout.addWidget(sticker_group)
@@ -431,13 +415,9 @@ class WritingSettingsTab(QWidget):
         else:
             self.radio_align_right.setChecked(True)
         
-        # 스티커 설정
-        self.chk_use_sticker.setChecked(
-            self.settings.value("writing/use_sticker", True, type=bool))
-        self.combo_sticker_pack.setCurrentIndex(
-            self.settings.value("writing/sticker_pack", 0, type=int))
+        # 스티커 설정 (단순화: 빈도만)
         self.combo_sticker_frequency.setCurrentIndex(
-            self.settings.value("writing/sticker_frequency", 1, type=int))
+            self.settings.value("writing/sticker_frequency", 2, type=int))  # 기본: 보통
     
     def save_settings(self):
         """설정 저장"""
@@ -502,11 +482,7 @@ class WritingSettingsTab(QWidget):
         self.settings.setValue("writing/text_align", 
                                self.align_button_group.checkedId())
         
-        # 스티커 설정
-        self.settings.setValue("writing/use_sticker", 
-                               self.chk_use_sticker.isChecked())
-        self.settings.setValue("writing/sticker_pack", 
-                               self.combo_sticker_pack.currentIndex())
+        # 스티커 설정 (단순화: 빈도만)
         self.settings.setValue("writing/sticker_frequency", 
                                self.combo_sticker_frequency.currentIndex())
     
@@ -635,20 +611,17 @@ class WritingSettingsTab(QWidget):
             },
             "align": align_map.get(self.align_button_group.checkedId(), "left"),
             "sticker": {
-                "enabled": self.chk_use_sticker.isChecked(),
-                "pack": self.combo_sticker_pack.currentIndex(),
-                "packName": self.combo_sticker_pack.currentText(),
                 "frequency": self.combo_sticker_frequency.currentIndex(),
-                "frequencyName": self.combo_sticker_frequency.currentText()
+                "frequencyName": self.combo_sticker_frequency.currentText(),
+                "enabled": self.combo_sticker_frequency.currentIndex() > 0  # 0 = 사용안함
             }
         }
     
     def get_sticker_settings(self) -> dict:
         """스티커 설정값 반환"""
+        freq_idx = self.combo_sticker_frequency.currentIndex()
         return {
-            "enabled": self.chk_use_sticker.isChecked(),
-            "pack": self.combo_sticker_pack.currentIndex(),
-            "packName": self.combo_sticker_pack.currentText(),
-            "frequency": self.combo_sticker_frequency.currentIndex(),
+            "enabled": freq_idx > 0,  # 0 = 사용안함
+            "frequency": freq_idx,
             "frequencyName": self.combo_sticker_frequency.currentText()
         }
