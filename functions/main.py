@@ -28,6 +28,167 @@ def get_db():
     return _db
 
 
+def convert_blocks_to_text(blocks: list) -> str:
+    """
+    구조화된 blocks를 미리보기용 순수 텍스트로 변환
+    (앱에서 사용자에게 보여주기 위한 용도)
+    """
+    lines = []
+    
+    for block in blocks:
+        block_type = block.get("type", "paragraph")
+        
+        if block_type == "heading":
+            level = block.get("level", 2)
+            text = block.get("text", "")
+            if level == 2:
+                lines.append(f"\n【{text}】\n")
+            else:
+                lines.append(f"\n▶ {text}\n")
+                
+        elif block_type == "paragraph":
+            text = block.get("text", "")
+            lines.append(f"{text}\n")
+            
+        elif block_type == "list":
+            style = block.get("style", "bullet")
+            items = block.get("items", [])
+            for i, item in enumerate(items):
+                if style == "number":
+                    lines.append(f"{i+1}. {item}")
+                else:
+                    lines.append(f"• {item}")
+            lines.append("")
+            
+        elif block_type == "divider":
+            lines.append("\n━━━━━━━━━━━━━━━━━━━━\n")
+            
+        elif block_type == "quotation":
+            text = block.get("text", "")
+            lines.append(f"\n「{text}」\n")
+    
+    return "\n".join(lines).strip()
+
+
+def convert_text_to_blocks(text: str) -> list:
+    """
+    기존 텍스트 형식을 blocks 구조로 변환 (하위 호환성)
+    """
+    import re
+    blocks = []
+    
+    # 줄 단위로 분리
+    lines = text.split('\n')
+    current_paragraph = []
+    
+    for line in lines:
+        line = line.strip()
+        
+        if not line:
+            # 빈 줄: 현재 문단 저장
+            if current_paragraph:
+                blocks.append({
+                    "type": "paragraph",
+                    "text": " ".join(current_paragraph)
+                })
+                current_paragraph = []
+            continue
+        
+        # 소제목 패턴 감지: 【제목】, ▶ 제목, ## 제목
+        heading_match = re.match(r'^【(.+?)】$|^▶\s*(.+)$|^#{1,3}\s*(.+)$', line)
+        if heading_match:
+            # 현재 문단 먼저 저장
+            if current_paragraph:
+                blocks.append({
+                    "type": "paragraph",
+                    "text": " ".join(current_paragraph)
+                })
+                current_paragraph = []
+            
+            heading_text = heading_match.group(1) or heading_match.group(2) or heading_match.group(3)
+            blocks.append({
+                "type": "heading",
+                "text": heading_text.strip(),
+                "level": 2
+            })
+            continue
+        
+        # 구분선 패턴 감지
+        if re.match(r'^[━─═\-]{5,}$', line):
+            if current_paragraph:
+                blocks.append({
+                    "type": "paragraph",
+                    "text": " ".join(current_paragraph)
+                })
+                current_paragraph = []
+            blocks.append({"type": "divider"})
+            continue
+        
+        # 목록 패턴 감지: • 항목, - 항목, 1. 항목
+        list_match = re.match(r'^[•\-▸]\s*(.+)$|^(\d+)\.\s*(.+)$', line)
+        if list_match:
+            if current_paragraph:
+                blocks.append({
+                    "type": "paragraph",
+                    "text": " ".join(current_paragraph)
+                })
+                current_paragraph = []
+            
+            if list_match.group(1):
+                # bullet
+                item_text = list_match.group(1)
+                # 연속된 목록 아이템 수집
+                if blocks and blocks[-1].get("type") == "list" and blocks[-1].get("style") == "bullet":
+                    blocks[-1]["items"].append(item_text)
+                else:
+                    blocks.append({
+                        "type": "list",
+                        "style": "bullet",
+                        "items": [item_text]
+                    })
+            else:
+                # number
+                item_text = list_match.group(3)
+                if blocks and blocks[-1].get("type") == "list" and blocks[-1].get("style") == "number":
+                    blocks[-1]["items"].append(item_text)
+                else:
+                    blocks.append({
+                        "type": "list",
+                        "style": "number",
+                        "items": [item_text]
+                    })
+            continue
+        
+        # 인용구 패턴 감지: 「인용」, > 인용
+        quote_match = re.match(r'^「(.+?)」$|^>\s*(.+)$', line)
+        if quote_match:
+            if current_paragraph:
+                blocks.append({
+                    "type": "paragraph",
+                    "text": " ".join(current_paragraph)
+                })
+                current_paragraph = []
+            
+            quote_text = quote_match.group(1) or quote_match.group(2)
+            blocks.append({
+                "type": "quotation",
+                "text": quote_text.strip()
+            })
+            continue
+        
+        # 일반 텍스트
+        current_paragraph.append(line)
+    
+    # 마지막 문단 저장
+    if current_paragraph:
+        blocks.append({
+            "type": "paragraph",
+            "text": " ".join(current_paragraph)
+        })
+    
+    return blocks if blocks else [{"type": "paragraph", "text": text}]
+
+
 def verify_user_token(req: https_fn.Request) -> dict:
     """Firebase Auth 토큰 검증"""
     auth_header = req.headers.get("Authorization", "")
@@ -1048,32 +1209,40 @@ REMINDER: NO TEXT - use only visual symbols, icons, and shapes. No labels or cap
             
             {outro_instruction}
             
-            [TEXT STYLE - 반드시 적용]
-            - 소제목 스타일: {heading_style}
-            - 강조 표현: {emphasis_style}
-            - 구분선: {divider_style}
-            - 문단 간격: {spacing_style}
-            - Q&A 표현: {qa_style}
-            - 목록 기호: {list_style}
-            
-            [OUTPUT FORMAT]
-            네이버 블로그 에디터에 바로 붙여넣을 수 있는 순수 텍스트 형식으로 작성하세요.
-            - Markdown 문법 사용 금지 (**, ##, - 등)
-            - HTML 태그 사용 금지
-            - 위에서 지정한 텍스트 스타일만 사용
+            [OUTPUT FORMAT - 구조화된 블록 형식]
+            네이버 블로그 에디터에서 서식을 적용할 수 있도록 구조화된 JSON을 출력하세요.
             
             반드시 아래 형식의 JSON을 출력하세요:
             {{
                 "title": "SEO 최적화된 매력적인 제목",
-                "content": "순수 텍스트 형식 본문 (위 스타일 적용)",
-                "content_text": "순수 텍스트 형식 본문 (content와 동일)"
+                "blocks": [
+                    {{"type": "paragraph", "text": "인사말/서론 내용"}},
+                    {{"type": "heading", "text": "소제목1", "level": 2}},
+                    {{"type": "paragraph", "text": "본문 내용..."}},
+                    {{"type": "list", "style": "bullet", "items": ["항목1", "항목2", "항목3"]}},
+                    {{"type": "divider"}},
+                    {{"type": "heading", "text": "소제목2", "level": 2}},
+                    {{"type": "paragraph", "text": "본문 내용..."}},
+                    {{"type": "quotation", "text": "강조하고 싶은 인용구 내용"}},
+                    {{"type": "heading", "text": "마무리", "level": 2}},
+                    {{"type": "paragraph", "text": "마무리 인사..."}}
+                ]
             }}
+            
+            [BLOCK TYPES]
+            - "paragraph": 일반 본문 텍스트 (여러 문장 가능)
+            - "heading": 소제목 (level: 2=큰 소제목, 3=작은 소제목)
+            - "list": 목록 (style: "bullet"=●, "number"=1.2.3.)
+            - "divider": 구분선
+            - "quotation": 인용구 (강조하고 싶은 핵심 문구)
             
             [IMPORTANT]
             - 최신 정보와 실제 데이터를 검색하여 포함
             - 실용적이고 구체적인 정보 제공
             - 독자가 바로 활용할 수 있는 팁 포함
-            - 최소 {char_count}자 이상 작성
+            - 최소 {char_count}자 분량의 내용
+            - blocks 배열에 10~20개 블록 포함
+            - 각 paragraph는 2~5문장 정도로 충분히 작성
             - JSON 형식 외의 텍스트 출력 금지
             """
 
@@ -1098,27 +1267,36 @@ REMINDER: NO TEXT - use only visual symbols, icons, and shapes. No labels or cap
                 else:
                     raise json.JSONDecodeError("No JSON found", raw_text, 0)
                 
-                # content 키 호환성 처리 (텍스트 전용)
-                if "content" not in data:
-                    data["content"] = data.get("content_text", data.get("body", "내용 생성 실패"))
-                if "content_text" not in data:
-                    data["content_text"] = data.get("content", "")
+                # blocks가 있으면 content_text 자동 생성 (미리보기용)
+                if "blocks" in data and isinstance(data["blocks"], list):
+                    content_text = convert_blocks_to_text(data["blocks"])
+                    data["content_text"] = content_text
+                    data["content"] = content_text  # 하위 호환성
+                else:
+                    # 구버전 호환: blocks가 없으면 기존 방식
+                    if "content" not in data:
+                        data["content"] = data.get("content_text", data.get("body", "내용 생성 실패"))
+                    if "content_text" not in data:
+                        data["content_text"] = data.get("content", "")
+                    # blocks가 없으면 텍스트에서 blocks 생성 시도
+                    data["blocks"] = convert_text_to_blocks(data.get("content_text", ""))
                 
                 return https_fn.Response(
-                    json.dumps(data), 
+                    json.dumps(data, ensure_ascii=False), 
                     status=200, 
                     mimetype="application/json"
                 )
                 
             except json.JSONDecodeError as e:
                 logging.error(f"JSON parse error in write: {e}, raw: {raw_text[:500]}")
+                # 실패 시 전체 텍스트를 하나의 paragraph 블록으로
+                fallback_blocks = [{"type": "paragraph", "text": raw_text}]
                 return https_fn.Response(json.dumps({
                     "title": f"{topic}",
                     "content": raw_text,
                     "content_text": raw_text,
-                    "content_md": raw_text,
-                    "content_html": f"<pre>{raw_text}</pre>"
-                }), status=200, mimetype="application/json")
+                    "blocks": fallback_blocks
+                }, ensure_ascii=False), status=200, mimetype="application/json")
 
     except Exception as e:
         logging.error(f"API Error: {e}")

@@ -1,6 +1,7 @@
 """
 Automation Worker Module
 백그라운드 작업 처리를 위한 Worker Thread
+v3.8.0: blocks 기반 에디터 조작 지원 추가
 """
 import logging
 from typing import Dict, Any, Optional
@@ -76,6 +77,8 @@ class AutomationWorker(QThread):
                 self.data['title'] = res_data.get('title', '')
                 # API 응답 키가 content 또는 content_text일 수 있음
                 self.data['content'] = res_data.get('content', '') or res_data.get('content_text', '')
+                # blocks 데이터 전달 (Selenium 에디터 조작용)
+                self.data['blocks'] = res_data.get('blocks', [])
                 
                 if not self.data['content']:
                     self.log_signal.emit("❌ 생성된 본문 내용이 없습니다.")
@@ -162,6 +165,7 @@ class AutomationWorker(QThread):
         """Execute blog publishing"""
         title = self.data.get('title', '')
         content = self.data.get('content', '')
+        blocks = self.data.get('blocks', [])  # 구조화된 블록 데이터
         category = self.data.get('category', '') or self.settings.get('default_category', '')
         
         if not title or not content:
@@ -220,11 +224,19 @@ class AutomationWorker(QThread):
             if self._is_cancelled:
                 return
             
-            # Step 4: Write content
+            # Step 4: Write content (blocks 또는 plain text)
             self.log_signal.emit("✍️ 본문 작성 중...")
             self.progress_signal.emit(85)
             
-            success, msg = self.bot.write_content(title, content)
+            # blocks가 있고 유효하면 에디터 도구를 사용하여 서식 적용
+            if blocks and isinstance(blocks, list) and len(blocks) > 0:
+                self.log_signal.emit(f"🎨 서식 적용 모드: {len(blocks)}개 블록")
+                success, msg = self.bot.write_content_with_blocks(title, blocks)
+            else:
+                # 기존 방식: 평문 붙여넣기
+                self.log_signal.emit("📝 일반 텍스트 모드")
+                success, msg = self.bot.write_content(title, content)
+            
             if not success:
                 self.log_signal.emit(f"❌ 작성 실패: {msg}")
                 return

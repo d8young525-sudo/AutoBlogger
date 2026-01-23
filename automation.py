@@ -1,7 +1,9 @@
 """
 Naver Blog Automation Module
 네이버 블로그 자동 포스팅 봇
-v3.6.3: 대표 썸네일 이미지 업로드 기능 추가 및 16:9 비율 지원
+v3.8.0: 구조화된 blocks 기반 에디터 조작 기능 추가
+- 네이버 SmartEditor 도구를 직접 조작하여 서식 적용
+- heading, paragraph, list, divider, quotation 블록 지원
 """
 import time
 import logging
@@ -548,6 +550,367 @@ class NaverBlogBot:
         except Exception as e:
             logger.error(f"Failed to write content: {e}")
             return False, f"Write error: {str(e)}"
+
+    def write_content_with_blocks(self, title: str, blocks: list) -> Tuple[bool, str]:
+        """
+        구조화된 blocks를 사용하여 에디터 서식을 직접 적용하며 작성
+        
+        Args:
+            title: 블로그 포스트 제목
+            blocks: 구조화된 블록 리스트
+                [
+                    {"type": "heading", "text": "소제목", "level": 2},
+                    {"type": "paragraph", "text": "본문 내용"},
+                    {"type": "list", "style": "bullet", "items": ["항목1", "항목2"]},
+                    {"type": "divider"},
+                    {"type": "quotation", "text": "인용구"}
+                ]
+        
+        Returns:
+            Tuple of (success, message)
+        """
+        if not self.driver:
+            return False, "Browser not started"
+        
+        if not blocks:
+            return False, "No blocks to write"
+            
+        try:
+            logger.info(f"Writing content with {len(blocks)} blocks...")
+            
+            # Step 0: 에디터 영역 확인
+            self._ensure_in_editor()
+            
+            # Step 1: 제목 입력
+            success, msg = self._write_title(title)
+            if not success:
+                return False, msg
+            
+            # Step 2: 본문 영역 클릭하여 커서 위치
+            success = self._click_content_area()
+            if not success:
+                return False, "Failed to click content area"
+            
+            # Step 3: 블록별로 처리
+            for i, block in enumerate(blocks):
+                block_type = block.get("type", "paragraph")
+                logger.info(f"Processing block {i+1}/{len(blocks)}: {block_type}")
+                
+                try:
+                    if block_type == "heading":
+                        self._write_heading_block(block)
+                    elif block_type == "paragraph":
+                        self._write_paragraph_block(block)
+                    elif block_type == "list":
+                        self._write_list_block(block)
+                    elif block_type == "divider":
+                        self._write_divider_block()
+                    elif block_type == "quotation":
+                        self._write_quotation_block(block)
+                    else:
+                        # 알 수 없는 블록 타입은 paragraph로 처리
+                        self._write_paragraph_block(block)
+                    
+                    time.sleep(0.3)  # 블록 간 짧은 대기
+                    
+                except Exception as block_error:
+                    logger.warning(f"Block {i+1} error: {block_error}")
+                    # 블록 하나 실패해도 계속 진행
+                    continue
+            
+            logger.info("Content with blocks written successfully")
+            return True, "Content written with formatting"
+            
+        except Exception as e:
+            logger.error(f"Failed to write content with blocks: {e}")
+            return False, f"Block write error: {str(e)}"
+
+    def _write_title(self, title: str) -> Tuple[bool, str]:
+        """제목 입력"""
+        try:
+            # 제목 placeholder 클릭
+            try:
+                title_area = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((
+                        By.CSS_SELECTOR, 
+                        "span.se-placeholder.se-fs32"
+                    ))
+                )
+                title_area.click()
+            except TimeoutException:
+                # 대안: 제목 컴포넌트 영역 클릭
+                title_component = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    ".se-documentTitle .se-text-paragraph"
+                )
+                title_component.click()
+            
+            time.sleep(0.5)
+            
+            # 제목 입력
+            if not self.clipboard_input(title):
+                ActionChains(self.driver).send_keys(title).perform()
+            
+            logger.info(f"Title entered: {title[:30]}...")
+            time.sleep(0.5)
+            return True, "Title written"
+            
+        except Exception as e:
+            logger.error(f"Title write error: {e}")
+            return False, f"Title error: {str(e)}"
+
+    def _click_content_area(self) -> bool:
+        """본문 영역 클릭하여 커서 위치"""
+        try:
+            # 본문 placeholder 클릭
+            try:
+                content_area = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((
+                        By.CSS_SELECTOR,
+                        "span.se-placeholder.se-fs15"
+                    ))
+                )
+                content_area.click()
+            except TimeoutException:
+                # 대안: 본문 영역 직접 클릭
+                content_component = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    ".se-component.se-text .se-text-paragraph"
+                )
+                content_component.click()
+            
+            time.sleep(0.3)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Content area click error: {e}")
+            return False
+
+    def _write_heading_block(self, block: dict):
+        """
+        소제목 블록 작성
+        - 텍스트 입력 후 굵게 + 글자 크기 적용
+        """
+        text = block.get("text", "")
+        level = block.get("level", 2)
+        
+        if not text:
+            return
+        
+        # 새 줄 시작
+        ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+        time.sleep(0.2)
+        
+        # 텍스트 입력
+        if not self.clipboard_input(text):
+            ActionChains(self.driver).send_keys(text).perform()
+        time.sleep(0.3)
+        
+        # 텍스트 전체 선택 (Shift+Home)
+        ActionChains(self.driver).key_down(Keys.SHIFT).send_keys(Keys.HOME).key_up(Keys.SHIFT).perform()
+        time.sleep(0.2)
+        
+        # 굵게 적용 (Ctrl+B)
+        ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('b').key_up(Keys.CONTROL).perform()
+        time.sleep(0.2)
+        
+        # 글자 크기 변경 (level에 따라)
+        # level 2 = 큰 소제목 (24px), level 3 = 작은 소제목 (19px)
+        self._apply_font_size("24" if level == 2 else "19")
+        
+        # 선택 해제 (End)
+        ActionChains(self.driver).send_keys(Keys.END).perform()
+        
+        # 새 줄로 이동
+        ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+        time.sleep(0.2)
+        
+        logger.info(f"Heading block written: {text[:20]}...")
+
+    def _write_paragraph_block(self, block: dict):
+        """
+        일반 문단 블록 작성
+        """
+        text = block.get("text", "")
+        
+        if not text:
+            return
+        
+        # 텍스트 입력
+        if not self.clipboard_input(text):
+            ActionChains(self.driver).send_keys(text).perform()
+        
+        # 새 줄로 이동
+        ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+        time.sleep(0.2)
+        
+        logger.info(f"Paragraph block written: {len(text)} chars")
+
+    def _write_list_block(self, block: dict):
+        """
+        목록 블록 작성
+        - 에디터의 목록 버튼 사용
+        """
+        style = block.get("style", "bullet")
+        items = block.get("items", [])
+        
+        if not items:
+            return
+        
+        # 새 줄 시작
+        ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+        time.sleep(0.2)
+        
+        # 목록 버튼 클릭
+        try:
+            list_btn = self.driver.find_element(
+                By.CSS_SELECTOR,
+                ".se-list-bullet-toolbar-button" if style == "bullet" else ".se-list-number-toolbar-button"
+            )
+            list_btn.click()
+            time.sleep(0.3)
+            
+            # 목록 스타일 선택 (드롭다운에서 첫 번째 옵션)
+            try:
+                first_option = WebDriverWait(self.driver, 2).until(
+                    EC.element_to_be_clickable((
+                        By.CSS_SELECTOR,
+                        ".se-popup-list-container li:first-child, [class*='list-style'] li:first-child"
+                    ))
+                )
+                first_option.click()
+                time.sleep(0.2)
+            except TimeoutException:
+                # 드롭다운이 없으면 바로 목록 모드 활성화됨
+                pass
+                
+        except NoSuchElementException:
+            # 목록 버튼을 못 찾으면 일반 텍스트로 작성
+            logger.warning("List button not found, writing as plain text")
+        
+        # 항목 입력
+        for i, item in enumerate(items):
+            if not self.clipboard_input(item):
+                ActionChains(self.driver).send_keys(item).perform()
+            
+            if i < len(items) - 1:
+                # 다음 항목으로 (Enter)
+                ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+            
+            time.sleep(0.2)
+        
+        # 목록 모드 종료 (Enter 2번)
+        ActionChains(self.driver).send_keys(Keys.ENTER).send_keys(Keys.ENTER).perform()
+        time.sleep(0.2)
+        
+        logger.info(f"List block written: {len(items)} items")
+
+    def _write_divider_block(self):
+        """
+        구분선 블록 삽입
+        - 에디터의 구분선 버튼 사용
+        """
+        try:
+            # 새 줄
+            ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+            time.sleep(0.2)
+            
+            # 구분선 버튼 클릭
+            divider_btn = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR,
+                    ".se-insert-horizontal-line-default-toolbar-button, [data-name='horizontal-line']"
+                ))
+            )
+            divider_btn.click()
+            time.sleep(0.5)
+            
+            logger.info("Divider block inserted")
+            
+        except (TimeoutException, NoSuchElementException):
+            # 구분선 버튼을 못 찾으면 텍스트로 대체
+            logger.warning("Divider button not found, using text divider")
+            if not self.clipboard_input("━━━━━━━━━━━━━━━━━━━━"):
+                ActionChains(self.driver).send_keys("━━━━━━━━━━━━━━━━━━━━").perform()
+            ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+
+    def _write_quotation_block(self, block: dict):
+        """
+        인용구 블록 작성
+        - 에디터의 인용구 버튼 사용
+        """
+        text = block.get("text", "")
+        
+        if not text:
+            return
+        
+        try:
+            # 새 줄
+            ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+            time.sleep(0.2)
+            
+            # 인용구 버튼 클릭
+            quote_btn = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR,
+                    ".se-insert-quotation-default-toolbar-button, [data-name='quotation']"
+                ))
+            )
+            quote_btn.click()
+            time.sleep(0.5)
+            
+            # 인용구 내용 입력
+            if not self.clipboard_input(text):
+                ActionChains(self.driver).send_keys(text).perform()
+            
+            # 인용구 모드 종료 (화살표 아래 + Enter)
+            ActionChains(self.driver).send_keys(Keys.ARROW_DOWN).perform()
+            time.sleep(0.2)
+            ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+            
+            logger.info(f"Quotation block written: {text[:20]}...")
+            
+        except (TimeoutException, NoSuchElementException):
+            # 인용구 버튼을 못 찾으면 텍스트로 대체
+            logger.warning("Quotation button not found, using text quotation")
+            formatted_text = f"「{text}」"
+            if not self.clipboard_input(formatted_text):
+                ActionChains(self.driver).send_keys(formatted_text).perform()
+            ActionChains(self.driver).send_keys(Keys.ENTER).perform()
+
+    def _apply_font_size(self, size: str):
+        """
+        글자 크기 적용
+        - 에디터의 글자 크기 드롭다운 사용
+        
+        Args:
+            size: 글자 크기 (예: "15", "19", "24", "32")
+        """
+        try:
+            # 글자 크기 버튼 클릭
+            size_btn = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR,
+                    ".se-font-size-code-toolbar-button, [data-name='font-size']"
+                ))
+            )
+            size_btn.click()
+            time.sleep(0.3)
+            
+            # 크기 선택 (드롭다운에서)
+            size_option = WebDriverWait(self.driver, 2).until(
+                EC.element_to_be_clickable((
+                    By.XPATH,
+                    f"//li[contains(@class, 'se-') and contains(text(), '{size}')]"
+                ))
+            )
+            size_option.click()
+            time.sleep(0.2)
+            
+            logger.info(f"Font size applied: {size}")
+            
+        except (TimeoutException, NoSuchElementException):
+            logger.warning(f"Font size button not found for size {size}")
 
     def upload_cover_image(self, image_path: str) -> Tuple[bool, str]:
         """

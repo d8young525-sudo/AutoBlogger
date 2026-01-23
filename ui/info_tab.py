@@ -142,6 +142,7 @@ class InfoTab(QWidget):
         self.auth_token = ""
         self.generated_content = ""
         self.generated_title = ""
+        self.generated_blocks = []  # 구조화된 블록 데이터 (Selenium 에디터 조작용)
         
         # 썸네일 재생성 횟수 추적 (주제별)
         self.current_topic_for_thumbnail = ""
@@ -689,6 +690,7 @@ class InfoTab(QWidget):
             "action": "publish_only",
             "title": title,
             "content": content,
+            "blocks": self.generated_blocks,  # 구조화된 블록 데이터 추가
             "category": category,
             "thumbnail_path": thumbnail_path,
             "images": {"thumbnail": thumbnail, "illustrations": []}
@@ -758,8 +760,11 @@ class InfoTab(QWidget):
         self.log_signal.emit(f"❌ {error_msg}")
 
     def update_result_view(self, result_data):
-        """결과 뷰어 업데이트 - TEXT만 표시"""
+        """결과 뷰어 업데이트 - TEXT 표시 + blocks 저장"""
         title = result_data.get("title", "제목 없음")
+        
+        # blocks 저장 (Selenium 에디터 조작용)
+        self.generated_blocks = result_data.get("blocks", [])
         
         # content_text 우선, 없으면 content 사용
         content = result_data.get("content_text", "") or result_data.get("content", "")
@@ -770,6 +775,9 @@ class InfoTab(QWidget):
                 import json
                 parsed = json.loads(content)
                 content = parsed.get("content_text", "") or parsed.get("content", content)
+                # blocks도 추출
+                if "blocks" in parsed and not self.generated_blocks:
+                    self.generated_blocks = parsed.get("blocks", [])
             except:
                 pass
         
@@ -791,7 +799,9 @@ class InfoTab(QWidget):
         # 발행 버튼 활성화
         self.btn_publish.setEnabled(True)
         
-        self.log_signal.emit("✨ 글 생성 완료! 확인 후 발행할 수 있습니다.")
+        # 로그에 blocks 정보 표시
+        block_count = len(self.generated_blocks) if self.generated_blocks else 0
+        self.log_signal.emit(f"✨ 글 생성 완료! ({block_count}개 블록) 확인 후 발행할 수 있습니다.")
 
     def _clean_to_plain_text(self, content: str) -> str:
         """
