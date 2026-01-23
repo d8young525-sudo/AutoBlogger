@@ -10,11 +10,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, 
     QLineEdit, QPushButton, QMessageBox,
     QHBoxLayout, QLabel, QComboBox,
-    QTabWidget, QScrollArea, QCheckBox, QRadioButton, QButtonGroup,
-    QFileDialog
+    QTabWidget, QScrollArea, QCheckBox, QRadioButton, QButtonGroup
 )
 from PySide6.QtCore import QSettings, Signal
-import os
 
 
 class WritingSettingsTab(QWidget):
@@ -111,115 +109,269 @@ class WritingSettingsTab(QWidget):
         self.chk_auto_thumbnail.setChecked(True)
         thumb_layout.addWidget(self.chk_auto_thumbnail)
         
-        # 썸네일 저장 경로 설정
-        path_layout = QHBoxLayout()
-        path_label = QLabel("썸네일 저장 경로:")
-        path_layout.addWidget(path_label)
-        
-        self.input_thumbnail_path = QLineEdit()
-        self.input_thumbnail_path.setPlaceholderText("예: C:\\Users\\Pictures\\blog_thumbnails")
-        path_layout.addWidget(self.input_thumbnail_path)
-        
-        self.btn_browse_path = QPushButton("📁")
-        self.btn_browse_path.setFixedWidth(40)
-        self.btn_browse_path.clicked.connect(self._browse_thumbnail_path)
-        path_layout.addWidget(self.btn_browse_path)
-        
-        thumb_layout.addLayout(path_layout)
-        
-        # 자동 등록 옵션
-        self.chk_auto_upload_thumbnail = QCheckBox("생성 후 자동으로 대표 이미지 등록")
-        self.chk_auto_upload_thumbnail.setChecked(True)
-        thumb_layout.addWidget(self.chk_auto_upload_thumbnail)
-        
-        thumb_notice = QLabel("💡 썸네일은 주제를 기반으로 AI가 자동 생성하며, 지정된 경로에 저장됩니다.")
+        thumb_notice = QLabel("💡 썸네일은 주제를 기반으로 AI가 자동 생성합니다.")
         thumb_notice.setStyleSheet("color: #888; font-size: 11px;")
         thumb_layout.addWidget(thumb_notice)
         
         group_thumbnail.setLayout(thumb_layout)
         layout.addWidget(group_thumbnail)
         
-        # ========== 4. 출력 스타일 설정 (텍스트 전용) ==========
-        group_output = QGroupBox("🎨 출력 스타일 설정")
+        # ========== 4. 네이버 에디터 서식 설정 ==========
+        group_naver_style = QGroupBox("🎨 네이버 에디터 서식 설정")
+        naver_style_layout = QVBoxLayout()
+        
+        naver_desc = QLabel("네이버 블로그 에디터에 적용할 서식을 설정합니다.\nJSON 생성 시 이 설정값이 자동 적용됩니다.")
+        naver_desc.setStyleSheet("color: #666; font-size: 11px; margin-bottom: 10px;")
+        naver_desc.setWordWrap(True)
+        naver_style_layout.addWidget(naver_desc)
+        
+        # 4-1. 폰트 설정
+        font_group = QGroupBox("📝 폰트 설정")
+        font_layout = QFormLayout()
+        
+        self.combo_naver_font = QComboBox()
+        self.combo_naver_font.addItems([
+            "나눔고딕 (se-ff-nanumgothic)",
+            "나눔명조 (se-ff-nanummyeongjo)",
+            "맑은고딕 (se-ff-malgungothic)",
+            "굴림 (se-ff-gulim)"
+        ])
+        font_layout.addRow("본문 폰트:", self.combo_naver_font)
+        
+        self.combo_naver_fontsize = QComboBox()
+        self.combo_naver_fontsize.addItems([
+            "11pt (se-fs11)", "13pt (se-fs13)", "15pt (se-fs15) - 기본", 
+            "16pt (se-fs16)", "18pt (se-fs18)", "19pt (se-fs19)", 
+            "24pt (se-fs24)", "28pt (se-fs28)", "32pt (se-fs32)"
+        ])
+        self.combo_naver_fontsize.setCurrentIndex(2)  # 15pt 기본
+        font_layout.addRow("글자 크기:", self.combo_naver_fontsize)
+        
+        self.combo_naver_lineheight = QComboBox()
+        self.combo_naver_lineheight.addItems([
+            "1.5 (좁게)", "1.8 (보통) - 기본", "2.0 (넓게)", "2.5 (매우 넓게)"
+        ])
+        self.combo_naver_lineheight.setCurrentIndex(1)
+        font_layout.addRow("줄 간격:", self.combo_naver_lineheight)
+        
+        font_group.setLayout(font_layout)
+        naver_style_layout.addWidget(font_group)
+        
+        # 4-2. 소제목 설정
+        heading_group = QGroupBox("📌 소제목 설정")
+        heading_layout = QFormLayout()
+        
+        self.combo_heading_style = QComboBox()
+        self.combo_heading_style.addItems([
+            "글자 크기만 키움 (18pt)",
+            "글자 크기 + 굵게 (18pt + Bold)",
+            "글자 크기 더 크게 (24pt)",
+            "글자 크기 더 크게 + 굵게 (24pt + Bold)"
+        ])
+        heading_layout.addRow("소제목 스타일:", self.combo_heading_style)
+        
+        self.combo_heading_color = QComboBox()
+        self.combo_heading_color.addItems([
+            "검정 (기본)",
+            "네이버 그린 (#03C75A)",
+            "블루 (#4A90E2)",
+            "다크 그레이 (#333333)"
+        ])
+        heading_layout.addRow("소제목 색상:", self.combo_heading_color)
+        
+        heading_group.setLayout(heading_layout)
+        naver_style_layout.addWidget(heading_group)
+        
+        # 4-3. 인용구 설정
+        quote_group = QGroupBox("💬 인용구 설정")
+        quote_layout = QFormLayout()
+        
+        self.combo_quote_style = QComboBox()
+        self.combo_quote_style.addItems([
+            "기본 (quotation_line) - 왼쪽 세로선",
+            "말풍선 (quotation_bubble) - 말풍선 모양",
+            "모서리 (quotation_corner) - 모서리 꽃음표",
+            "밑줄 (quotation_underline) - 하단 밑줄",
+            "포스트잇 (quotation_postit) - 메모지 스타일"
+        ])
+        quote_layout.addRow("인용구 모양:", self.combo_quote_style)
+        
+        quote_group.setLayout(quote_layout)
+        naver_style_layout.addWidget(quote_group)
+        
+        # 4-4. 구분선 설정
+        divider_group = QGroupBox("─ 구분선 설정")
+        divider_layout = QFormLayout()
+        
+        self.combo_divider_style = QComboBox()
+        self.combo_divider_style.addItems([
+            "기본 실선 (line1)",
+            "점선 (line2)",
+            "이중선 (line3)",
+            "굵은 실선 (line4)",
+            "파선 (line5)",
+            "점선 + 실선 (line6)",
+            "장식선 (line7)"
+        ])
+        divider_layout.addRow("구분선 모양:", self.combo_divider_style)
+        
+        divider_group.setLayout(divider_layout)
+        naver_style_layout.addWidget(divider_group)
+        
+        # 4-5. 텍스트 서식 설정
+        text_format_group = QGroupBox("✍️ 텍스트 서식")
+        text_format_layout = QVBoxLayout()
+        
+        # 강조 표현 체크박스
+        emphasis_row = QHBoxLayout()
+        self.chk_bold = QCheckBox("굵게 (Bold)")
+        self.chk_bold.setChecked(True)
+        self.chk_italic = QCheckBox("기울임 (Italic)")
+        self.chk_underline = QCheckBox("밑줄 (Underline)")
+        self.chk_strikethrough = QCheckBox("취소선")
+        
+        emphasis_row.addWidget(QLabel("강조 표현:"))
+        emphasis_row.addWidget(self.chk_bold)
+        emphasis_row.addWidget(self.chk_italic)
+        emphasis_row.addWidget(self.chk_underline)
+        emphasis_row.addWidget(self.chk_strikethrough)
+        emphasis_row.addStretch()
+        text_format_layout.addLayout(emphasis_row)
+        
+        # 강조 색상
+        color_form = QFormLayout()
+        self.combo_emphasis_color = QComboBox()
+        self.combo_emphasis_color.addItems([
+            "없음 (기본 검정)",
+            "네이버 그린 (#03C75A)",
+            "블루 (#4A90E2)",
+            "오렌지 (#F39C12)",
+            "빨강 (#E74C3C)"
+        ])
+        color_form.addRow("강조 글자색:", self.combo_emphasis_color)
+        
+        self.combo_highlight_color = QComboBox()
+        self.combo_highlight_color.addItems([
+            "없음",
+            "노란색 형광펜",
+            "연두색 형광펜",
+            "연분홍 형광펜"
+        ])
+        color_form.addRow("배경 강조색:", self.combo_highlight_color)
+        text_format_layout.addLayout(color_form)
+        
+        text_format_group.setLayout(text_format_layout)
+        naver_style_layout.addWidget(text_format_group)
+        
+        # 4-6. 정렬 설정
+        align_group = QGroupBox("≡ 정렬 설정")
+        align_layout = QHBoxLayout()
+        
+        self.radio_align_left = QRadioButton("왼쪽 정렬")
+        self.radio_align_left.setChecked(True)
+        self.radio_align_center = QRadioButton("가운데 정렬")
+        self.radio_align_right = QRadioButton("오른쪽 정렬")
+        
+        self.align_button_group = QButtonGroup()
+        self.align_button_group.addButton(self.radio_align_left, 0)
+        self.align_button_group.addButton(self.radio_align_center, 1)
+        self.align_button_group.addButton(self.radio_align_right, 2)
+        
+        align_layout.addWidget(self.radio_align_left)
+        align_layout.addWidget(self.radio_align_center)
+        align_layout.addWidget(self.radio_align_right)
+        align_layout.addStretch()
+        
+        align_group.setLayout(align_layout)
+        naver_style_layout.addWidget(align_group)
+        
+        group_naver_style.setLayout(naver_style_layout)
+        layout.addWidget(group_naver_style)
+        
+        # ========== 5. 기존 출력 스타일 설정 (TEXT/Markdown/HTML) ==========
+        group_output = QGroupBox("📄 일반 텍스트 출력 스타일 (미리보기용)")
+        group_output.setCheckable(True)
+        group_output.setChecked(False)
         output_layout = QVBoxLayout()
         
-        output_desc = QLabel("생성되는 글의 텍스트 스타일을 설정합니다.\n네이버 블로그 에디터에 맞춰 순수 텍스트 형식으로 생성됩니다.")
+        output_desc = QLabel("생성되는 글의 텍스트 미리보기 포맷 설정 (실제 발행 시에는 네이버 에디터 서식이 적용됩니다)")
         output_desc.setStyleSheet("color: #666; font-size: 11px;")
+        output_desc.setWordWrap(True)
         output_layout.addWidget(output_desc)
         
-        text_form = QFormLayout()
+        self.output_tabs = QTabWidget()
         
-        # 소제목 스타일
+        # TEXT 설정 탭
+        text_widget = QWidget()
+        text_layout = QFormLayout(text_widget)
+        
         self.combo_text_heading = QComboBox()
-        self.combo_text_heading.addItems([
-            "【 】 대괄호", 
-            "▶ 화살표", 
-            "● 원형 불릿", 
-            "■ 사각형", 
-            "★ 별표",
-            "— 대시",
-            "본문과 동일 (구분 없음)"
-        ])
-        text_form.addRow("소제목 스타일:", self.combo_text_heading)
+        self.combo_text_heading.addItems(["【 】 대괄호", "▶ 화살표", "● 원형", "■ 사각형", "※ 꽃표"])
+        text_layout.addRow("소제목 스타일:", self.combo_text_heading)
         
-        # 강조 표현
         self.combo_text_emphasis = QComboBox()
-        self.combo_text_emphasis.addItems([
-            "「강조」 꺽쇠괄호", 
-            "'강조' 작은따옴표", 
-            "\"강조\" 큰따옴표",
-            "*강조* 별표",
-            "강조 없음 (일반 텍스트)"
-        ])
-        text_form.addRow("강조 표현:", self.combo_text_emphasis)
+        self.combo_text_emphasis.addItems(["** 별표 **", "「 」 꺽쇠", "★ ~ ★", "밑줄 ___"])
+        text_layout.addRow("강조 표현:", self.combo_text_emphasis)
         
-        # 구분선
         self.combo_text_divider = QComboBox()
-        self.combo_text_divider.addItems([
-            "━━━━━━━━ (실선)", 
-            "- - - - - - - - (점선)", 
-            "════════ (이중선)", 
-            "빈 줄 2개",
-            "구분선 없음"
-        ])
-        text_form.addRow("구분선:", self.combo_text_divider)
+        self.combo_text_divider.addItems(["━━━━━━ (실선)", "- - - - - (점선)", "═══════ (이중선)", "빈 줄만"])
+        text_layout.addRow("구분선:", self.combo_text_divider)
         
-        # 문단 간격
         self.combo_text_spacing = QComboBox()
-        self.combo_text_spacing.addItems([
-            "기본 (빈 줄 1개)", 
-            "넓게 (빈 줄 2개)", 
-            "좁게 (줄바꿈만)"
-        ])
-        text_form.addRow("문단 간격:", self.combo_text_spacing)
+        self.combo_text_spacing.addItems(["기본 (1줄)", "넓게 (2줄)", "좁게 (줄바꿈만)"])
+        text_layout.addRow("문단 간격:", self.combo_text_spacing)
         
-        # Q&A 스타일
-        self.combo_text_qa = QComboBox()
-        self.combo_text_qa.addItems([
-            "Q. 질문 / A. 답변",
-            "❓ 질문 / ✔️ 답변",
-            "▶ 질문 / → 답변",
-            "일반 문단 (구분 없음)"
-        ])
-        text_form.addRow("Q&A 스타일:", self.combo_text_qa)
+        self.output_tabs.addTab(text_widget, "📄 Text")
         
-        # 목록 기호
-        self.combo_text_list = QComboBox()
-        self.combo_text_list.addItems([
-            "• 불릿 기호",
-            "- 하이픈",
-            "▸ 삼각형",
-            "1. 2. 3. 숫자",
-            "① ② ③ 원문자"
-        ])
-        text_form.addRow("목록 기호:", self.combo_text_list)
+        # MARKDOWN 설정 탭
+        md_widget = QWidget()
+        md_layout = QFormLayout(md_widget)
         
-        output_layout.addLayout(text_form)
+        self.combo_md_heading = QComboBox()
+        self.combo_md_heading.addItems(["## H2 사용", "### H3 사용", "**굵게** 사용"])
+        md_layout.addRow("헤딩 레벨:", self.combo_md_heading)
         
-        output_notice = QLabel("💡 설정한 스타일은 AI 글 생성 시 자동으로 적용됩니다.")
-        output_notice.setStyleSheet("color: #888; font-size: 11px; margin-top: 10px;")
-        output_layout.addWidget(output_notice)
+        self.combo_md_list = QComboBox()
+        self.combo_md_list.addItems(["- 하이픈", "* 별표", "1. 숫자"])
+        md_layout.addRow("목록 기호:", self.combo_md_list)
         
+        self.combo_md_qa = QComboBox()
+        self.combo_md_qa.addItems(["> 인용문 스타일", "**Q:** 굵게 스타일", "### Q: 헤딩 스타일"])
+        md_layout.addRow("Q&A 표현:", self.combo_md_qa)
+        
+        self.combo_md_narrative = QComboBox()
+        self.combo_md_narrative.addItems(["짧은 문장 (모바일 최적화)", "긴 문장 (PC 최적화)"])
+        md_layout.addRow("서술 방식:", self.combo_md_narrative)
+        
+        self.output_tabs.addTab(md_widget, "📝 Markdown")
+        
+        # HTML 설정 탭
+        html_widget = QWidget()
+        html_layout = QFormLayout(html_widget)
+        
+        self.combo_html_title = QComboBox()
+        self.combo_html_title.addItems(["<h2> 태그", "<h3> 태그", "<strong> 굵게만"])
+        html_layout.addRow("제목 스타일:", self.combo_html_title)
+        
+        self.combo_html_qa = QComboBox()
+        self.combo_html_qa.addItems(["<blockquote> 인용", "<div class='qa'> 커스텀", "<details> 접기형"])
+        html_layout.addRow("Q&A 스타일:", self.combo_html_qa)
+        
+        self.combo_html_color = QComboBox()
+        self.combo_html_color.addItems(["네이버 그린 (#03C75A)", "블루 (#4A90E2)", "오렌지 (#F39C12)", "그레이 (#666)"])
+        html_layout.addRow("테마 컬러:", self.combo_html_color)
+        
+        self.combo_html_font = QComboBox()
+        self.combo_html_font.addItems(["기본 (시스템)", "나눔고딕", "맑은 고딕"])
+        html_layout.addRow("본문 폰트:", self.combo_html_font)
+        
+        self.combo_html_box = QComboBox()
+        self.combo_html_box.addItems(["배경색 박스", "테두리 박스", "없음"])
+        html_layout.addRow("강조 박스:", self.combo_html_box)
+        
+        self.output_tabs.addTab(html_widget, "🌐 HTML")
+        
+        output_layout.addWidget(self.output_tabs)
         group_output.setLayout(output_layout)
         layout.addWidget(group_output)
         
@@ -262,20 +414,63 @@ class WritingSettingsTab(QWidget):
         self.chk_auto_thumbnail.setChecked(
             self.settings.value("writing/auto_thumbnail", True, type=bool))
         
-        # 썸네일 저장 경로 (기본값: 바탕화면)
-        default_path = os.path.join(os.path.expanduser("~"), "Desktop", "blog_thumbnails")
-        self.input_thumbnail_path.setText(
-            self.settings.value("writing/thumbnail_path", default_path))
-        
-        # 자동 등록 설정
-        self.chk_auto_upload_thumbnail.setChecked(
-            self.settings.value("writing/auto_upload_thumbnail", True, type=bool))
+        # 네이버 에디터 서식 설정
+        self._load_naver_style_settings()
         
         # 출력 스타일 설정
         self._load_output_style_settings()
     
+    def _load_naver_style_settings(self):
+        """네이버 에디터 서식 설정 로드"""
+        # 폰트 설정
+        self.combo_naver_font.setCurrentIndex(
+            self.settings.value("writing/naver_font", 0, type=int))
+        self.combo_naver_fontsize.setCurrentIndex(
+            self.settings.value("writing/naver_fontsize", 2, type=int))
+        self.combo_naver_lineheight.setCurrentIndex(
+            self.settings.value("writing/naver_lineheight", 1, type=int))
+        
+        # 소제목 설정
+        self.combo_heading_style.setCurrentIndex(
+            self.settings.value("writing/heading_style", 0, type=int))
+        self.combo_heading_color.setCurrentIndex(
+            self.settings.value("writing/heading_color", 0, type=int))
+        
+        # 인용구 설정
+        self.combo_quote_style.setCurrentIndex(
+            self.settings.value("writing/quote_style", 0, type=int))
+        
+        # 구분선 설정
+        self.combo_divider_style.setCurrentIndex(
+            self.settings.value("writing/divider_style", 0, type=int))
+        
+        # 텍스트 서식
+        self.chk_bold.setChecked(
+            self.settings.value("writing/text_bold", True, type=bool))
+        self.chk_italic.setChecked(
+            self.settings.value("writing/text_italic", False, type=bool))
+        self.chk_underline.setChecked(
+            self.settings.value("writing/text_underline", False, type=bool))
+        self.chk_strikethrough.setChecked(
+            self.settings.value("writing/text_strikethrough", False, type=bool))
+        
+        self.combo_emphasis_color.setCurrentIndex(
+            self.settings.value("writing/emphasis_color", 0, type=int))
+        self.combo_highlight_color.setCurrentIndex(
+            self.settings.value("writing/highlight_color", 0, type=int))
+        
+        # 정렬 설정
+        align_index = self.settings.value("writing/text_align", 0, type=int)
+        if align_index == 0:
+            self.radio_align_left.setChecked(True)
+        elif align_index == 1:
+            self.radio_align_center.setChecked(True)
+        else:
+            self.radio_align_right.setChecked(True)
+    
     def _load_output_style_settings(self):
-        """출력 스타일 설정 로드 (텍스트 전용)"""
+        """출력 스타일 설정 로드"""
+        # Text 설정
         self.combo_text_heading.setCurrentIndex(
             self.settings.value("writing/style_text_heading", 0, type=int))
         self.combo_text_emphasis.setCurrentIndex(
@@ -284,10 +479,28 @@ class WritingSettingsTab(QWidget):
             self.settings.value("writing/style_text_divider", 0, type=int))
         self.combo_text_spacing.setCurrentIndex(
             self.settings.value("writing/style_text_spacing", 0, type=int))
-        self.combo_text_qa.setCurrentIndex(
-            self.settings.value("writing/style_text_qa", 0, type=int))
-        self.combo_text_list.setCurrentIndex(
-            self.settings.value("writing/style_text_list", 0, type=int))
+        
+        # Markdown 설정
+        self.combo_md_heading.setCurrentIndex(
+            self.settings.value("writing/style_md_heading", 0, type=int))
+        self.combo_md_list.setCurrentIndex(
+            self.settings.value("writing/style_md_list", 0, type=int))
+        self.combo_md_qa.setCurrentIndex(
+            self.settings.value("writing/style_md_qa", 0, type=int))
+        self.combo_md_narrative.setCurrentIndex(
+            self.settings.value("writing/style_md_narrative", 0, type=int))
+        
+        # HTML 설정
+        self.combo_html_title.setCurrentIndex(
+            self.settings.value("writing/style_html_title", 0, type=int))
+        self.combo_html_qa.setCurrentIndex(
+            self.settings.value("writing/style_html_qa", 0, type=int))
+        self.combo_html_color.setCurrentIndex(
+            self.settings.value("writing/style_html_color", 0, type=int))
+        self.combo_html_font.setCurrentIndex(
+            self.settings.value("writing/style_html_font", 0, type=int))
+        self.combo_html_box.setCurrentIndex(
+            self.settings.value("writing/style_html_box", 0, type=int))
     
     def save_settings(self):
         """설정 저장"""
@@ -306,10 +519,9 @@ class WritingSettingsTab(QWidget):
         # 썸네일 설정
         self.settings.setValue("writing/auto_thumbnail", 
                                self.chk_auto_thumbnail.isChecked())
-        self.settings.setValue("writing/thumbnail_path",
-                               self.input_thumbnail_path.text().strip())
-        self.settings.setValue("writing/auto_upload_thumbnail",
-                               self.chk_auto_upload_thumbnail.isChecked())
+        
+        # 네이버 에디터 서식 설정
+        self._save_naver_style_settings()
         
         # 출력 스타일 설정
         self._save_output_style_settings()
@@ -317,8 +529,48 @@ class WritingSettingsTab(QWidget):
         self.settings_changed.emit()
         QMessageBox.information(self, "완료", "글쓰기 설정이 저장되었습니다.")
     
+    def _save_naver_style_settings(self):
+        """네이버 에디터 서식 설정 저장"""
+        # 폰트 설정
+        self.settings.setValue("writing/naver_font", 
+                               self.combo_naver_font.currentIndex())
+        self.settings.setValue("writing/naver_fontsize", 
+                               self.combo_naver_fontsize.currentIndex())
+        self.settings.setValue("writing/naver_lineheight", 
+                               self.combo_naver_lineheight.currentIndex())
+        
+        # 소제목 설정
+        self.settings.setValue("writing/heading_style", 
+                               self.combo_heading_style.currentIndex())
+        self.settings.setValue("writing/heading_color", 
+                               self.combo_heading_color.currentIndex())
+        
+        # 인용구 설정
+        self.settings.setValue("writing/quote_style", 
+                               self.combo_quote_style.currentIndex())
+        
+        # 구분선 설정
+        self.settings.setValue("writing/divider_style", 
+                               self.combo_divider_style.currentIndex())
+        
+        # 텍스트 서식
+        self.settings.setValue("writing/text_bold", self.chk_bold.isChecked())
+        self.settings.setValue("writing/text_italic", self.chk_italic.isChecked())
+        self.settings.setValue("writing/text_underline", self.chk_underline.isChecked())
+        self.settings.setValue("writing/text_strikethrough", self.chk_strikethrough.isChecked())
+        
+        self.settings.setValue("writing/emphasis_color", 
+                               self.combo_emphasis_color.currentIndex())
+        self.settings.setValue("writing/highlight_color", 
+                               self.combo_highlight_color.currentIndex())
+        
+        # 정렬 설정
+        self.settings.setValue("writing/text_align", 
+                               self.align_button_group.checkedId())
+    
     def _save_output_style_settings(self):
-        """출력 스타일 설정 저장 (텍스트 전용)"""
+        """출력 스타일 설정 저장"""
+        # Text 설정
         self.settings.setValue("writing/style_text_heading", 
                                self.combo_text_heading.currentIndex())
         self.settings.setValue("writing/style_text_emphasis", 
@@ -327,10 +579,28 @@ class WritingSettingsTab(QWidget):
                                self.combo_text_divider.currentIndex())
         self.settings.setValue("writing/style_text_spacing", 
                                self.combo_text_spacing.currentIndex())
-        self.settings.setValue("writing/style_text_qa", 
-                               self.combo_text_qa.currentIndex())
-        self.settings.setValue("writing/style_text_list", 
-                               self.combo_text_list.currentIndex())
+        
+        # Markdown 설정
+        self.settings.setValue("writing/style_md_heading", 
+                               self.combo_md_heading.currentIndex())
+        self.settings.setValue("writing/style_md_list", 
+                               self.combo_md_list.currentIndex())
+        self.settings.setValue("writing/style_md_qa", 
+                               self.combo_md_qa.currentIndex())
+        self.settings.setValue("writing/style_md_narrative", 
+                               self.combo_md_narrative.currentIndex())
+        
+        # HTML 설정
+        self.settings.setValue("writing/style_html_title", 
+                               self.combo_html_title.currentIndex())
+        self.settings.setValue("writing/style_html_qa", 
+                               self.combo_html_qa.currentIndex())
+        self.settings.setValue("writing/style_html_color", 
+                               self.combo_html_color.currentIndex())
+        self.settings.setValue("writing/style_html_font", 
+                               self.combo_html_font.currentIndex())
+        self.settings.setValue("writing/style_html_box", 
+                               self.combo_html_box.currentIndex())
     
     # ========== 외부에서 호출하는 Getter 메서드들 ==========
     
@@ -362,36 +632,117 @@ class WritingSettingsTab(QWidget):
         """자동 썸네일 생성 여부"""
         return self.chk_auto_thumbnail.isChecked()
     
-    def get_thumbnail_path(self) -> str:
-        """썸네일 저장 경로 반환"""
-        path = self.input_thumbnail_path.text().strip()
-        if not path:
-            path = os.path.join(os.path.expanduser("~"), "Desktop", "blog_thumbnails")
-        return path
-    
-    def is_auto_upload_thumbnail_enabled(self) -> bool:
-        """자동 대표 이미지 등록 여부"""
-        return self.chk_auto_upload_thumbnail.isChecked()
-    
-    def _browse_thumbnail_path(self):
-        """썸네일 저장 경로 선택 다이얼로그"""
-        current_path = self.input_thumbnail_path.text().strip()
-        if not current_path or not os.path.exists(current_path):
-            current_path = os.path.expanduser("~")
+    def get_naver_editor_style_settings(self) -> dict:
+        """네이버 에디터 서식 설정값 반환 (JSON 생성 시 사용)"""
+        # 폰트 매핑
+        font_map = {
+            0: "se-ff-nanumgothic",
+            1: "se-ff-nanummyeongjo", 
+            2: "se-ff-malgungothic",
+            3: "se-ff-gulim"
+        }
         
-        folder = QFileDialog.getExistingDirectory(
-            self, "썸네일 저장 폴더 선택", current_path
-        )
-        if folder:
-            self.input_thumbnail_path.setText(folder)
+        fontsize_map = {
+            0: "se-fs11", 1: "se-fs13", 2: "se-fs15",
+            3: "se-fs16", 4: "se-fs18", 5: "se-fs19",
+            6: "se-fs24", 7: "se-fs28", 8: "se-fs32"
+        }
+        
+        lineheight_map = {0: 1.5, 1: 1.8, 2: 2.0, 3: 2.5}
+        
+        # 소제목 크기/볼드 매핑
+        heading_size_map = {0: "se-fs18", 1: "se-fs18", 2: "se-fs24", 3: "se-fs24"}
+        heading_bold_map = {0: False, 1: True, 2: False, 3: True}
+        
+        heading_color_map = {
+            0: None,  # 기본 검정
+            1: "#03C75A",  # 네이버 그린
+            2: "#4A90E2",  # 블루
+            3: "#333333"   # 다크 그레이
+        }
+        
+        # 인용구 스타일 매핑
+        quote_style_map = {
+            0: "quotation_line",
+            1: "quotation_bubble",
+            2: "quotation_corner", 
+            3: "quotation_underline",
+            4: "quotation_postit"
+        }
+        
+        # 구분선 스타일 매핑
+        divider_style_map = {
+            0: "line1", 1: "line2", 2: "line3", 3: "line4",
+            4: "line5", 5: "line6", 6: "line7"
+        }
+        
+        # 강조 색상 매핑
+        emphasis_color_map = {
+            0: None,  # 기본 검정
+            1: "#03C75A",  # 네이버 그린
+            2: "#4A90E2",  # 블루
+            3: "#F39C12",  # 오렌지
+            4: "#E74C3C"   # 빨강
+        }
+        
+        highlight_color_map = {
+            0: None,
+            1: "#FFFF00",  # 노란색
+            2: "#90EE90",  # 연두색
+            3: "#FFB6C1"   # 연분홍
+        }
+        
+        # 정렬 매핑
+        align_map = {0: "left", 1: "center", 2: "right"}
+        
+        return {
+            "font": {
+                "family": font_map.get(self.combo_naver_font.currentIndex(), "se-ff-nanumgothic"),
+                "size": fontsize_map.get(self.combo_naver_fontsize.currentIndex(), "se-fs15"),
+                "lineHeight": lineheight_map.get(self.combo_naver_lineheight.currentIndex(), 1.8)
+            },
+            "heading": {
+                "size": heading_size_map.get(self.combo_heading_style.currentIndex(), "se-fs18"),
+                "bold": heading_bold_map.get(self.combo_heading_style.currentIndex(), False),
+                "color": heading_color_map.get(self.combo_heading_color.currentIndex())
+            },
+            "quotation": {
+                "style": quote_style_map.get(self.combo_quote_style.currentIndex(), "quotation_line")
+            },
+            "divider": {
+                "style": divider_style_map.get(self.combo_divider_style.currentIndex(), "line1")
+            },
+            "emphasis": {
+                "bold": self.chk_bold.isChecked(),
+                "italic": self.chk_italic.isChecked(),
+                "underline": self.chk_underline.isChecked(),
+                "strikethrough": self.chk_strikethrough.isChecked(),
+                "color": emphasis_color_map.get(self.combo_emphasis_color.currentIndex()),
+                "highlightColor": highlight_color_map.get(self.combo_highlight_color.currentIndex())
+            },
+            "align": align_map.get(self.align_button_group.checkedId(), "left")
+        }
     
     def get_output_style_settings(self) -> dict:
-        """출력 스타일 설정값 반환 (텍스트 전용)"""
+        """출력 스타일 설정값 반환"""
         return {
-            "heading": self.combo_text_heading.currentText(),
-            "emphasis": self.combo_text_emphasis.currentText(),
-            "divider": self.combo_text_divider.currentText(),
-            "spacing": self.combo_text_spacing.currentText(),
-            "qa": self.combo_text_qa.currentText(),
-            "list": self.combo_text_list.currentText(),
+            "text": {
+                "heading": self.combo_text_heading.currentText(),
+                "emphasis": self.combo_text_emphasis.currentText(),
+                "divider": self.combo_text_divider.currentText(),
+                "spacing": self.combo_text_spacing.currentText(),
+            },
+            "markdown": {
+                "heading": self.combo_md_heading.currentText(),
+                "list": self.combo_md_list.currentText(),
+                "qa": self.combo_md_qa.currentText(),
+                "narrative": self.combo_md_narrative.currentText(),
+            },
+            "html": {
+                "title": self.combo_html_title.currentText(),
+                "qa": self.combo_html_qa.currentText(),
+                "color": self.combo_html_color.currentText(),
+                "font": self.combo_html_font.currentText(),
+                "box": self.combo_html_box.currentText(),
+            }
         }
