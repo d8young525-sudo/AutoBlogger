@@ -307,6 +307,16 @@ class WritingSettingsTab(QWidget):
         
         sticker_form = QFormLayout()
         
+        self.combo_sticker_pack = QComboBox()
+        self.combo_sticker_pack.addItems([
+            "기본 스티커 (심플)",
+            "라인프렌즈 (브라운/코니)",
+            "이모티콘 스타일",
+            "귀여운 동물 스티커",
+            "감정 표현 스티커"
+        ])
+        sticker_form.addRow("스티커 팩:", self.combo_sticker_pack)
+        
         self.combo_sticker_frequency = QComboBox()
         self.combo_sticker_frequency.addItems([
             "사용 안함",
@@ -315,7 +325,7 @@ class WritingSettingsTab(QWidget):
             "많이 (문단마다)"
         ])
         self.combo_sticker_frequency.setCurrentIndex(2)  # 보통이 기본
-        sticker_form.addRow("스티커 사용:", self.combo_sticker_frequency)
+        sticker_form.addRow("사용 빈도:", self.combo_sticker_frequency)
         
         sticker_layout.addLayout(sticker_form)
         
@@ -415,7 +425,9 @@ class WritingSettingsTab(QWidget):
         else:
             self.radio_align_right.setChecked(True)
         
-        # 스티커 설정 (단순화: 빈도만)
+        # 스티커 설정
+        self.combo_sticker_pack.setCurrentIndex(
+            self.settings.value("writing/sticker_pack", 0, type=int))
         self.combo_sticker_frequency.setCurrentIndex(
             self.settings.value("writing/sticker_frequency", 2, type=int))  # 기본: 보통
     
@@ -482,7 +494,9 @@ class WritingSettingsTab(QWidget):
         self.settings.setValue("writing/text_align", 
                                self.align_button_group.checkedId())
         
-        # 스티커 설정 (단순화: 빈도만)
+        # 스티커 설정
+        self.settings.setValue("writing/sticker_pack", 
+                               self.combo_sticker_pack.currentIndex())
         self.settings.setValue("writing/sticker_frequency", 
                                self.combo_sticker_frequency.currentIndex())
     
@@ -611,9 +625,11 @@ class WritingSettingsTab(QWidget):
             },
             "align": align_map.get(self.align_button_group.checkedId(), "left"),
             "sticker": {
+                "enabled": self.combo_sticker_frequency.currentIndex() > 0,  # 0 = 사용안함
+                "pack": self.combo_sticker_pack.currentIndex(),
+                "packName": self.combo_sticker_pack.currentText(),
                 "frequency": self.combo_sticker_frequency.currentIndex(),
-                "frequencyName": self.combo_sticker_frequency.currentText(),
-                "enabled": self.combo_sticker_frequency.currentIndex() > 0  # 0 = 사용안함
+                "frequencyName": self.combo_sticker_frequency.currentText()
             }
         }
     
@@ -622,6 +638,8 @@ class WritingSettingsTab(QWidget):
         freq_idx = self.combo_sticker_frequency.currentIndex()
         return {
             "enabled": freq_idx > 0,  # 0 = 사용안함
+            "pack": self.combo_sticker_pack.currentIndex(),
+            "packName": self.combo_sticker_pack.currentText(),
             "frequency": freq_idx,
             "frequencyName": self.combo_sticker_frequency.currentText()
         }
