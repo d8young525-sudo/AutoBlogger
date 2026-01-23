@@ -794,3 +794,25 @@ class InfoTab(QWidget):
         """생성 버튼 초기화 (에러 시 호출)"""
         self.btn_generate.setEnabled(True)
         self.btn_generate.setText("📝 원고 생성")
+    
+    def cleanup_workers(self):
+        """모든 워커 스레드 정리 (앱 종료 시 호출)"""
+        # 추천 워커 정리
+        if self.recommend_worker and self.recommend_worker.isRunning():
+            self.recommend_worker.quit()
+            self.recommend_worker.wait(1000)
+        
+        # 키워드 추천 워커 정리
+        if self.keyword_recommend_worker and self.keyword_recommend_worker.isRunning():
+            self.keyword_recommend_worker.quit()
+            self.keyword_recommend_worker.wait(1000)
+        
+        # 분석 워커 정리
+        if self.analysis_worker and self.analysis_worker.isRunning():
+            self.analysis_worker.quit()
+            self.analysis_worker.wait(1000)
+        
+        # 썸네일 워커 정리
+        if self.thumbnail_worker and self.thumbnail_worker.isRunning():
+            self.thumbnail_worker.quit()
+            self.thumbnail_worker.wait(1000)
