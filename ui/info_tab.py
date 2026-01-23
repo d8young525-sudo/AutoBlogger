@@ -138,36 +138,69 @@ class InfoTab(QWidget):
         group_topic = QGroupBox("1. 주제 기획")
         topic_layout = QVBoxLayout()
         
-        # 좌우 2분할 레이아웃 (동일 비율)
-        topic_columns = QHBoxLayout()
-        topic_columns.setSpacing(15)
+        # 주제 생성 방식 선택 (라디오 버튼)
+        mode_layout = QHBoxLayout()
+        self.topic_mode_group = QButtonGroup()
         
-        # ===== 왼쪽: 카테고리에서 주제 생성 =====
-        left_frame = QFrame()
-        left_frame.setStyleSheet("QFrame { border: 1px solid #ddd; border-radius: 8px; padding: 10px; }")
-        left_layout = QVBoxLayout(left_frame)
+        self.radio_use_category = QRadioButton("📂 카테고리에서 주제 생성")
+        self.radio_use_category.setChecked(True)
+        self.radio_use_category.toggled.connect(self.toggle_topic_mode)
+        self.topic_mode_group.addButton(self.radio_use_category, 0)
+        mode_layout.addWidget(self.radio_use_category)
         
-        left_header = QLabel("📂 카테고리에서 주제 생성")
-        left_header.setStyleSheet("font-weight: bold; font-size: 13px; border: none; padding: 5px 0;")
-        left_layout.addWidget(left_header)
+        self.radio_use_keyword = QRadioButton("✏️ 키워드 기반 주제 생성")
+        self.radio_use_keyword.toggled.connect(self.toggle_topic_mode)
+        self.topic_mode_group.addButton(self.radio_use_keyword, 1)
+        mode_layout.addWidget(self.radio_use_keyword)
         
-        form_cat = QFormLayout()
+        mode_layout.addStretch()
+        topic_layout.addLayout(mode_layout)
+        
+        # ===== 카테고리 입력 영역 =====
+        self.category_frame = QFrame()
+        category_layout = QHBoxLayout(self.category_frame)
+        category_layout.setContentsMargins(0, 5, 0, 5)
+        
+        category_layout.addWidget(QLabel("카테고리:"))
         self.combo_cat = QComboBox()
         self.combo_cat.setEditable(True)
+        self.combo_cat.setMinimumWidth(200)
         self.combo_cat.addItems([
             "차량 관리 상식", "자동차 보험/사고처리", "리스/렌트/할부 금융", 
             "교통법규/범칙금", "자동차 여행 코스", "전기차 라이프", "중고차 거래 팁"
         ])
-        form_cat.addRow("카테고리:", self.combo_cat)
-        left_layout.addLayout(form_cat)
+        category_layout.addWidget(self.combo_cat)
         
         self.btn_recommend = QPushButton("✨ AI 추천 주제 받기")
         self.btn_recommend.clicked.connect(self.get_recommendations)
         self.btn_recommend.setStyleSheet("background-color: #5D5D5D; color: white; padding: 8px;")
-        left_layout.addWidget(self.btn_recommend)
+        category_layout.addWidget(self.btn_recommend)
+        category_layout.addStretch()
         
-        # 추천 주제 표시 영역
-        left_layout.addWidget(QLabel("추천 주제 선택:"))
+        topic_layout.addWidget(self.category_frame)
+        
+        # ===== 키워드 입력 영역 =====
+        self.keyword_frame = QFrame()
+        keyword_layout = QHBoxLayout(self.keyword_frame)
+        keyword_layout.setContentsMargins(0, 5, 0, 5)
+        
+        keyword_layout.addWidget(QLabel("키워드:"))
+        self.manual_topic = QLineEdit()
+        self.manual_topic.setPlaceholderText("키워드 입력 (예: 전기차 충전)")
+        self.manual_topic.setMinimumWidth(200)
+        keyword_layout.addWidget(self.manual_topic)
+        
+        self.btn_keyword_recommend = QPushButton("🔍 키워드로 주제 추천받기")
+        self.btn_keyword_recommend.clicked.connect(self.get_keyword_recommendations)
+        self.btn_keyword_recommend.setStyleSheet("background-color: #4A90E2; color: white; padding: 8px;")
+        keyword_layout.addWidget(self.btn_keyword_recommend)
+        keyword_layout.addStretch()
+        
+        self.keyword_frame.hide()  # 초기에는 숨김
+        topic_layout.addWidget(self.keyword_frame)
+        
+        # ===== 통합 추천 주제 표시 영역 =====
+        topic_layout.addWidget(QLabel("추천 주제 선택:"))
         self.topic_area = QScrollArea()
         self.topic_area.setWidgetResizable(True)
         self.topic_area.setMinimumHeight(150)
@@ -176,58 +209,17 @@ class InfoTab(QWidget):
         self.topic_layout_inner = QVBoxLayout(self.topic_widget)
         self.topic_layout_inner.setAlignment(Qt.AlignTop)
         self.topic_area.setWidget(self.topic_widget)
-        left_layout.addWidget(self.topic_area)
-        
-        topic_columns.addWidget(left_frame, 1)  # stretch factor = 1
-        
-        # ===== 오른쪽: 키워드 기반 주제 생성 =====
-        right_frame = QFrame()
-        right_frame.setStyleSheet("QFrame { border: 1px solid #ddd; border-radius: 8px; padding: 10px; }")
-        right_layout = QVBoxLayout(right_frame)
-        
-        right_header = QLabel("✏️ 키워드 기반 주제 생성")
-        right_header.setStyleSheet("font-weight: bold; font-size: 13px; border: none; padding: 5px 0;")
-        right_layout.addWidget(right_header)
-        
-        keyword_desc = QLabel("키워드를 입력하면 AI가 관련 주제를 추천합니다.")
-        keyword_desc.setStyleSheet("color: #666; font-size: 11px; border: none;")
-        keyword_desc.setWordWrap(True)
-        right_layout.addWidget(keyword_desc)
-        
-        self.manual_topic = QLineEdit()
-        self.manual_topic.setPlaceholderText("키워드 입력 (예: 전기차 충전)")
-        right_layout.addWidget(self.manual_topic)
-        
-        self.btn_keyword_recommend = QPushButton("🔍 키워드로 주제 추천받기")
-        self.btn_keyword_recommend.clicked.connect(self.get_keyword_recommendations)
-        self.btn_keyword_recommend.setStyleSheet("background-color: #4A90E2; color: white; padding: 8px;")
-        right_layout.addWidget(self.btn_keyword_recommend)
-        
-        # 키워드 기반 추천 주제 표시 영역
-        right_layout.addWidget(QLabel("추천 주제 선택:"))
-        self.keyword_topic_area = QScrollArea()
-        self.keyword_topic_area.setWidgetResizable(True)
-        self.keyword_topic_area.setMinimumHeight(150)
-        self.keyword_topic_widget = QWidget()
-        self.keyword_topic_layout_inner = QVBoxLayout(self.keyword_topic_widget)
-        self.keyword_topic_layout_inner.setAlignment(Qt.AlignTop)
-        self.keyword_topic_area.setWidget(self.keyword_topic_widget)
-        right_layout.addWidget(self.keyword_topic_area)
-        
-        topic_columns.addWidget(right_frame, 1)  # stretch factor = 1 (동일 비율)
-        
-        topic_layout.addLayout(topic_columns)
+        topic_layout.addWidget(self.topic_area)
         
         # 레거시 호환용 (숨김 처리)
-        self.radio_use_category = QRadioButton()
-        self.radio_use_category.setChecked(True)
-        self.radio_use_category.hide()
         self.radio_use_manual = QRadioButton()
         self.radio_use_manual.hide()
-        self.category_frame = QFrame()
-        self.category_frame.hide()
         self.manual_frame = QFrame()
         self.manual_frame.hide()
+        self.keyword_topic_area = QScrollArea()
+        self.keyword_topic_area.hide()
+        self.keyword_topic_widget = QWidget()
+        self.keyword_topic_layout_inner = QVBoxLayout(self.keyword_topic_widget)
         
         group_topic.setLayout(topic_layout)
         layout.addWidget(group_topic)

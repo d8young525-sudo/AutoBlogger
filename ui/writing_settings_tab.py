@@ -131,20 +131,31 @@ class WritingSettingsTab(QWidget):
         
         self.combo_naver_font = QComboBox()
         self.combo_naver_font.addItems([
-            "나눔고딕 (se-ff-nanumgothic)",
-            "나눔명조 (se-ff-nanummyeongjo)",
-            "맑은고딕 (se-ff-malgungothic)",
-            "굴림 (se-ff-gulim)"
+            "기본서체 (시스템)",
+            "나눔고딕",
+            "나눔명조",
+            "나눔바른고딕",
+            "나눔스퀘어",
+            "마루부리",
+            "다시시작해 (손글씨)",
+            "바른히피 (손글씨)",
+            "우리딸손글씨"
         ])
+        self.combo_naver_font.setCurrentIndex(1)  # 나눔고딕 기본
         font_layout.addRow("본문 폰트:", self.combo_naver_font)
         
         self.combo_naver_fontsize = QComboBox()
         self.combo_naver_fontsize.addItems([
-            "11pt (se-fs11)", "13pt (se-fs13)", "15pt (se-fs15) - 기본", 
-            "16pt (se-fs16)", "18pt (se-fs18)", "19pt (se-fs19)", 
-            "24pt (se-fs24)", "28pt (se-fs28)", "32pt (se-fs32)"
+            "9pt (매우 작게)", 
+            "10pt (작게)", 
+            "11pt (약간 작게)", 
+            "13pt (보통)", 
+            "15pt (기본) - 권장", 
+            "18pt (크게)", 
+            "24pt (매우 크게)", 
+            "32pt (제목용)"
         ])
-        self.combo_naver_fontsize.setCurrentIndex(2)  # 15pt 기본
+        self.combo_naver_fontsize.setCurrentIndex(4)  # 15pt 기본
         font_layout.addRow("글자 크기:", self.combo_naver_fontsize)
         
         self.combo_naver_lineheight = QComboBox()
@@ -285,95 +296,50 @@ class WritingSettingsTab(QWidget):
         align_group.setLayout(align_layout)
         naver_style_layout.addWidget(align_group)
         
+        # 4-7. 스티커 설정 (이모지 대체)
+        sticker_group = QGroupBox("🎨 스티커 설정 (이모지 대체)")
+        sticker_layout = QVBoxLayout()
+        
+        sticker_desc = QLabel("글 생성 시 이모지(🚗, 💡 등) 대신 네이버 에디터 기본 스티커를 사용합니다.\n스티커를 사용하면 더 자연스럽고 네이버 블로그 친화적인 글이 됩니다.")
+        sticker_desc.setStyleSheet("color: #666; font-size: 11px;")
+        sticker_desc.setWordWrap(True)
+        sticker_layout.addWidget(sticker_desc)
+        
+        self.chk_use_sticker = QCheckBox("이모지 대신 네이버 스티커 사용")
+        self.chk_use_sticker.setChecked(True)
+        sticker_layout.addWidget(self.chk_use_sticker)
+        
+        sticker_form = QFormLayout()
+        self.combo_sticker_pack = QComboBox()
+        self.combo_sticker_pack.addItems([
+            "기본 스티커 (심플)",
+            "라인프렌즈 (브라운/코니)",
+            "이모티콘 스타일",
+            "귀여운 동물 스티커",
+            "감정 표현 스티커"
+        ])
+        sticker_form.addRow("스티커 팩:", self.combo_sticker_pack)
+        
+        self.combo_sticker_frequency = QComboBox()
+        self.combo_sticker_frequency.addItems([
+            "적게 사용 (소제목에만)",
+            "보통 (소제목 + 강조)",
+            "많이 사용 (문단마다)"
+        ])
+        self.combo_sticker_frequency.setCurrentIndex(1)
+        sticker_form.addRow("사용 빈도:", self.combo_sticker_frequency)
+        
+        sticker_layout.addLayout(sticker_form)
+        
+        sticker_notice = QLabel("💡 스티커는 글의 시각적 매력을 높이고 가독성을 향상시킵니다.")
+        sticker_notice.setStyleSheet("color: #888; font-size: 11px; margin-top: 5px;")
+        sticker_layout.addWidget(sticker_notice)
+        
+        sticker_group.setLayout(sticker_layout)
+        naver_style_layout.addWidget(sticker_group)
+        
         group_naver_style.setLayout(naver_style_layout)
         layout.addWidget(group_naver_style)
-        
-        # ========== 5. 기존 출력 스타일 설정 (TEXT/Markdown/HTML) ==========
-        group_output = QGroupBox("📄 일반 텍스트 출력 스타일 (미리보기용)")
-        group_output.setCheckable(True)
-        group_output.setChecked(False)
-        output_layout = QVBoxLayout()
-        
-        output_desc = QLabel("생성되는 글의 텍스트 미리보기 포맷 설정 (실제 발행 시에는 네이버 에디터 서식이 적용됩니다)")
-        output_desc.setStyleSheet("color: #666; font-size: 11px;")
-        output_desc.setWordWrap(True)
-        output_layout.addWidget(output_desc)
-        
-        self.output_tabs = QTabWidget()
-        
-        # TEXT 설정 탭
-        text_widget = QWidget()
-        text_layout = QFormLayout(text_widget)
-        
-        self.combo_text_heading = QComboBox()
-        self.combo_text_heading.addItems(["【 】 대괄호", "▶ 화살표", "● 원형", "■ 사각형", "※ 꽃표"])
-        text_layout.addRow("소제목 스타일:", self.combo_text_heading)
-        
-        self.combo_text_emphasis = QComboBox()
-        self.combo_text_emphasis.addItems(["** 별표 **", "「 」 꺽쇠", "★ ~ ★", "밑줄 ___"])
-        text_layout.addRow("강조 표현:", self.combo_text_emphasis)
-        
-        self.combo_text_divider = QComboBox()
-        self.combo_text_divider.addItems(["━━━━━━ (실선)", "- - - - - (점선)", "═══════ (이중선)", "빈 줄만"])
-        text_layout.addRow("구분선:", self.combo_text_divider)
-        
-        self.combo_text_spacing = QComboBox()
-        self.combo_text_spacing.addItems(["기본 (1줄)", "넓게 (2줄)", "좁게 (줄바꿈만)"])
-        text_layout.addRow("문단 간격:", self.combo_text_spacing)
-        
-        self.output_tabs.addTab(text_widget, "📄 Text")
-        
-        # MARKDOWN 설정 탭
-        md_widget = QWidget()
-        md_layout = QFormLayout(md_widget)
-        
-        self.combo_md_heading = QComboBox()
-        self.combo_md_heading.addItems(["## H2 사용", "### H3 사용", "**굵게** 사용"])
-        md_layout.addRow("헤딩 레벨:", self.combo_md_heading)
-        
-        self.combo_md_list = QComboBox()
-        self.combo_md_list.addItems(["- 하이픈", "* 별표", "1. 숫자"])
-        md_layout.addRow("목록 기호:", self.combo_md_list)
-        
-        self.combo_md_qa = QComboBox()
-        self.combo_md_qa.addItems(["> 인용문 스타일", "**Q:** 굵게 스타일", "### Q: 헤딩 스타일"])
-        md_layout.addRow("Q&A 표현:", self.combo_md_qa)
-        
-        self.combo_md_narrative = QComboBox()
-        self.combo_md_narrative.addItems(["짧은 문장 (모바일 최적화)", "긴 문장 (PC 최적화)"])
-        md_layout.addRow("서술 방식:", self.combo_md_narrative)
-        
-        self.output_tabs.addTab(md_widget, "📝 Markdown")
-        
-        # HTML 설정 탭
-        html_widget = QWidget()
-        html_layout = QFormLayout(html_widget)
-        
-        self.combo_html_title = QComboBox()
-        self.combo_html_title.addItems(["<h2> 태그", "<h3> 태그", "<strong> 굵게만"])
-        html_layout.addRow("제목 스타일:", self.combo_html_title)
-        
-        self.combo_html_qa = QComboBox()
-        self.combo_html_qa.addItems(["<blockquote> 인용", "<div class='qa'> 커스텀", "<details> 접기형"])
-        html_layout.addRow("Q&A 스타일:", self.combo_html_qa)
-        
-        self.combo_html_color = QComboBox()
-        self.combo_html_color.addItems(["네이버 그린 (#03C75A)", "블루 (#4A90E2)", "오렌지 (#F39C12)", "그레이 (#666)"])
-        html_layout.addRow("테마 컬러:", self.combo_html_color)
-        
-        self.combo_html_font = QComboBox()
-        self.combo_html_font.addItems(["기본 (시스템)", "나눔고딕", "맑은 고딕"])
-        html_layout.addRow("본문 폰트:", self.combo_html_font)
-        
-        self.combo_html_box = QComboBox()
-        self.combo_html_box.addItems(["배경색 박스", "테두리 박스", "없음"])
-        html_layout.addRow("강조 박스:", self.combo_html_box)
-        
-        self.output_tabs.addTab(html_widget, "🌐 HTML")
-        
-        output_layout.addWidget(self.output_tabs)
-        group_output.setLayout(output_layout)
-        layout.addWidget(group_output)
         
         # ========== 저장 버튼 ==========
         self.btn_save = QPushButton("💾 글쓰기 설정 저장")
@@ -416,9 +382,6 @@ class WritingSettingsTab(QWidget):
         
         # 네이버 에디터 서식 설정
         self._load_naver_style_settings()
-        
-        # 출력 스타일 설정
-        self._load_output_style_settings()
     
     def _load_naver_style_settings(self):
         """네이버 에디터 서식 설정 로드"""
@@ -467,40 +430,14 @@ class WritingSettingsTab(QWidget):
             self.radio_align_center.setChecked(True)
         else:
             self.radio_align_right.setChecked(True)
-    
-    def _load_output_style_settings(self):
-        """출력 스타일 설정 로드"""
-        # Text 설정
-        self.combo_text_heading.setCurrentIndex(
-            self.settings.value("writing/style_text_heading", 0, type=int))
-        self.combo_text_emphasis.setCurrentIndex(
-            self.settings.value("writing/style_text_emphasis", 0, type=int))
-        self.combo_text_divider.setCurrentIndex(
-            self.settings.value("writing/style_text_divider", 0, type=int))
-        self.combo_text_spacing.setCurrentIndex(
-            self.settings.value("writing/style_text_spacing", 0, type=int))
         
-        # Markdown 설정
-        self.combo_md_heading.setCurrentIndex(
-            self.settings.value("writing/style_md_heading", 0, type=int))
-        self.combo_md_list.setCurrentIndex(
-            self.settings.value("writing/style_md_list", 0, type=int))
-        self.combo_md_qa.setCurrentIndex(
-            self.settings.value("writing/style_md_qa", 0, type=int))
-        self.combo_md_narrative.setCurrentIndex(
-            self.settings.value("writing/style_md_narrative", 0, type=int))
-        
-        # HTML 설정
-        self.combo_html_title.setCurrentIndex(
-            self.settings.value("writing/style_html_title", 0, type=int))
-        self.combo_html_qa.setCurrentIndex(
-            self.settings.value("writing/style_html_qa", 0, type=int))
-        self.combo_html_color.setCurrentIndex(
-            self.settings.value("writing/style_html_color", 0, type=int))
-        self.combo_html_font.setCurrentIndex(
-            self.settings.value("writing/style_html_font", 0, type=int))
-        self.combo_html_box.setCurrentIndex(
-            self.settings.value("writing/style_html_box", 0, type=int))
+        # 스티커 설정
+        self.chk_use_sticker.setChecked(
+            self.settings.value("writing/use_sticker", True, type=bool))
+        self.combo_sticker_pack.setCurrentIndex(
+            self.settings.value("writing/sticker_pack", 0, type=int))
+        self.combo_sticker_frequency.setCurrentIndex(
+            self.settings.value("writing/sticker_frequency", 1, type=int))
     
     def save_settings(self):
         """설정 저장"""
@@ -522,9 +459,6 @@ class WritingSettingsTab(QWidget):
         
         # 네이버 에디터 서식 설정
         self._save_naver_style_settings()
-        
-        # 출력 스타일 설정
-        self._save_output_style_settings()
         
         self.settings_changed.emit()
         QMessageBox.information(self, "완료", "글쓰기 설정이 저장되었습니다.")
@@ -567,40 +501,14 @@ class WritingSettingsTab(QWidget):
         # 정렬 설정
         self.settings.setValue("writing/text_align", 
                                self.align_button_group.checkedId())
-    
-    def _save_output_style_settings(self):
-        """출력 스타일 설정 저장"""
-        # Text 설정
-        self.settings.setValue("writing/style_text_heading", 
-                               self.combo_text_heading.currentIndex())
-        self.settings.setValue("writing/style_text_emphasis", 
-                               self.combo_text_emphasis.currentIndex())
-        self.settings.setValue("writing/style_text_divider", 
-                               self.combo_text_divider.currentIndex())
-        self.settings.setValue("writing/style_text_spacing", 
-                               self.combo_text_spacing.currentIndex())
         
-        # Markdown 설정
-        self.settings.setValue("writing/style_md_heading", 
-                               self.combo_md_heading.currentIndex())
-        self.settings.setValue("writing/style_md_list", 
-                               self.combo_md_list.currentIndex())
-        self.settings.setValue("writing/style_md_qa", 
-                               self.combo_md_qa.currentIndex())
-        self.settings.setValue("writing/style_md_narrative", 
-                               self.combo_md_narrative.currentIndex())
-        
-        # HTML 설정
-        self.settings.setValue("writing/style_html_title", 
-                               self.combo_html_title.currentIndex())
-        self.settings.setValue("writing/style_html_qa", 
-                               self.combo_html_qa.currentIndex())
-        self.settings.setValue("writing/style_html_color", 
-                               self.combo_html_color.currentIndex())
-        self.settings.setValue("writing/style_html_font", 
-                               self.combo_html_font.currentIndex())
-        self.settings.setValue("writing/style_html_box", 
-                               self.combo_html_box.currentIndex())
+        # 스티커 설정
+        self.settings.setValue("writing/use_sticker", 
+                               self.chk_use_sticker.isChecked())
+        self.settings.setValue("writing/sticker_pack", 
+                               self.combo_sticker_pack.currentIndex())
+        self.settings.setValue("writing/sticker_frequency", 
+                               self.combo_sticker_frequency.currentIndex())
     
     # ========== 외부에서 호출하는 Getter 메서드들 ==========
     
@@ -634,18 +542,23 @@ class WritingSettingsTab(QWidget):
     
     def get_naver_editor_style_settings(self) -> dict:
         """네이버 에디터 서식 설정값 반환 (JSON 생성 시 사용)"""
-        # 폰트 매핑
+        # 폰트 매핑 (실제 네이버 블로그 에디터 기준)
         font_map = {
-            0: "se-ff-nanumgothic",
-            1: "se-ff-nanummyeongjo", 
-            2: "se-ff-malgungothic",
-            3: "se-ff-gulim"
+            0: "system",           # 기본서체
+            1: "nanumgothic",      # 나눔고딕
+            2: "nanummyeongjo",    # 나눔명조
+            3: "nanumbarungothic", # 나눔바른고딕
+            4: "nanumsquare",      # 나눔스퀘어
+            5: "maruburi",         # 마루부리
+            6: "dasisijakae",      # 다시시작해
+            7: "barenhipi",        # 바른히피
+            8: "uridalsonglssi"    # 우리딸손글씨
         }
         
         fontsize_map = {
-            0: "se-fs11", 1: "se-fs13", 2: "se-fs15",
-            3: "se-fs16", 4: "se-fs18", 5: "se-fs19",
-            6: "se-fs24", 7: "se-fs28", 8: "se-fs32"
+            0: "se-fs9", 1: "se-fs10", 2: "se-fs11",
+            3: "se-fs13", 4: "se-fs15", 5: "se-fs18",
+            6: "se-fs24", 7: "se-fs32"
         }
         
         lineheight_map = {0: 1.5, 1: 1.8, 2: 2.0, 3: 2.5}
@@ -720,29 +633,22 @@ class WritingSettingsTab(QWidget):
                 "color": emphasis_color_map.get(self.combo_emphasis_color.currentIndex()),
                 "highlightColor": highlight_color_map.get(self.combo_highlight_color.currentIndex())
             },
-            "align": align_map.get(self.align_button_group.checkedId(), "left")
+            "align": align_map.get(self.align_button_group.checkedId(), "left"),
+            "sticker": {
+                "enabled": self.chk_use_sticker.isChecked(),
+                "pack": self.combo_sticker_pack.currentIndex(),
+                "packName": self.combo_sticker_pack.currentText(),
+                "frequency": self.combo_sticker_frequency.currentIndex(),
+                "frequencyName": self.combo_sticker_frequency.currentText()
+            }
         }
     
-    def get_output_style_settings(self) -> dict:
-        """출력 스타일 설정값 반환"""
+    def get_sticker_settings(self) -> dict:
+        """스티커 설정값 반환"""
         return {
-            "text": {
-                "heading": self.combo_text_heading.currentText(),
-                "emphasis": self.combo_text_emphasis.currentText(),
-                "divider": self.combo_text_divider.currentText(),
-                "spacing": self.combo_text_spacing.currentText(),
-            },
-            "markdown": {
-                "heading": self.combo_md_heading.currentText(),
-                "list": self.combo_md_list.currentText(),
-                "qa": self.combo_md_qa.currentText(),
-                "narrative": self.combo_md_narrative.currentText(),
-            },
-            "html": {
-                "title": self.combo_html_title.currentText(),
-                "qa": self.combo_html_qa.currentText(),
-                "color": self.combo_html_color.currentText(),
-                "font": self.combo_html_font.currentText(),
-                "box": self.combo_html_box.currentText(),
-            }
+            "enabled": self.chk_use_sticker.isChecked(),
+            "pack": self.combo_sticker_pack.currentIndex(),
+            "packName": self.combo_sticker_pack.currentText(),
+            "frequency": self.combo_sticker_frequency.currentIndex(),
+            "frequencyName": self.combo_sticker_frequency.currentText()
         }
