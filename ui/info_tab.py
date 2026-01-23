@@ -1,6 +1,6 @@
 """
 정보성 글쓰기 탭 - 블로그 포스팅 자동 생성 기능
-v3.6.4: 세부설정 항상 활성화, 썸네일 글씨 제거, QThread 크래시 수정
+v3.7.1: 주제기획 UI 개편 (좌우 2단), 직접입력 제거, QThread 크래시 수정
 """
 import requests
 import re
@@ -172,90 +172,76 @@ class InfoTab(QWidget):
         content_widget = QWidget()
         layout = QVBoxLayout(content_widget)
 
-        # ========== 1. 주제 기획 ==========
+        # ========== 1. 주제 기획 (좌우 2단) ==========
         group_topic = QGroupBox("1. 주제 기획")
         topic_layout = QVBoxLayout()
         
-        # 추천 방식 선택 그룹
+        # 주제 생성 방식 선택 (좌우 2단 구성)
+        mode_row = QHBoxLayout()
+        
+        # 라디오 버튼 그룹
         self.topic_mode_group = QButtonGroup()
         
-        # 방식 1: 카테고리에서 AI 추천
-        self.radio_use_category = QRadioButton("📂 카테고리에서 AI 추천 받기")
+        # ===== 좌측: 카테고리에서 주제 생성 =====
+        self.category_frame = QFrame()
+        self.category_frame.setFrameShape(QFrame.StyledPanel)
+        self.category_frame.setStyleSheet("QFrame { border: 2px solid #4A90E2; border-radius: 5px; background-color: #f0f8ff; }")
+        left_layout = QVBoxLayout(self.category_frame)
+        
+        self.radio_use_category = QRadioButton("📂 카테고리에서 주제 생성하기")
         self.radio_use_category.setChecked(True)
         self.radio_use_category.toggled.connect(self.toggle_topic_mode)
         self.topic_mode_group.addButton(self.radio_use_category, 0)
-        topic_layout.addWidget(self.radio_use_category)
+        left_layout.addWidget(self.radio_use_category)
         
-        # 카테고리 선택 영역
-        self.category_frame = QFrame()
-        category_layout = QVBoxLayout(self.category_frame)
-        category_layout.setContentsMargins(20, 5, 0, 10)
-        
-        form_cat = QFormLayout()
         self.combo_cat = QComboBox()
-        self.combo_cat.setEditable(True)
         self.combo_cat.addItems([
             "차량 관리 상식", "자동차 보험/사고처리", "리스/렌트/할부 금융", 
             "교통법규/범칙금", "자동차 여행 코스", "전기차 라이프", "중고차 거래 팁"
         ])
-        form_cat.addRow("카테고리:", self.combo_cat)
-        category_layout.addLayout(form_cat)
+        left_layout.addWidget(self.combo_cat)
         
-        self.btn_recommend = QPushButton("✨ AI 추천 주제 받기 (실시간 트렌드 반영)")
-        self.btn_recommend.clicked.connect(self.get_recommendations)
-        self.btn_recommend.setStyleSheet("background-color: #5D5D5D; color: white; padding: 8px;")
-        category_layout.addWidget(self.btn_recommend)
+        mode_row.addWidget(self.category_frame)
         
-        topic_layout.addWidget(self.category_frame)
+        # ===== 우측: 키워드 기반 주제 생성 =====
+        self.keyword_frame = QFrame()
+        self.keyword_frame.setFrameShape(QFrame.StyledPanel)
+        self.keyword_frame.setStyleSheet("QFrame { border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9; }")
+        right_layout = QVBoxLayout(self.keyword_frame)
         
-        # 방식 2: 키워드 기반 AI 추천
-        self.radio_use_keyword = QRadioButton("🔑 키워드 기반 AI 추천 받기")
+        self.radio_use_keyword = QRadioButton("🔑 키워드 기반 주제 생성하기")
         self.radio_use_keyword.toggled.connect(self.toggle_topic_mode)
         self.topic_mode_group.addButton(self.radio_use_keyword, 1)
-        topic_layout.addWidget(self.radio_use_keyword)
-        
-        # 키워드 입력 영역
-        self.keyword_frame = QFrame()
-        keyword_layout = QVBoxLayout(self.keyword_frame)
-        keyword_layout.setContentsMargins(20, 5, 0, 10)
-        
-        keyword_desc = QLabel("쉼표(,)로 구분하여 여러 키워드 입력 가능")
-        keyword_desc.setStyleSheet("color: #666; font-size: 11px;")
-        keyword_layout.addWidget(keyword_desc)
+        right_layout.addWidget(self.radio_use_keyword)
         
         self.input_keywords = QLineEdit()
-        self.input_keywords.setPlaceholderText("예: 자동차관리, 엔진오일, 신차길들이기, 연비관리")
+        self.input_keywords.setPlaceholderText("예: 타이어관리, 엔진오일, 연비")
         self.input_keywords.setEnabled(False)
-        keyword_layout.addWidget(self.input_keywords)
+        right_layout.addWidget(self.input_keywords)
         
-        self.btn_keyword_recommend = QPushButton("✨ 키워드로 주제 추천 받기")
-        self.btn_keyword_recommend.clicked.connect(self.get_keyword_recommendations)
-        self.btn_keyword_recommend.setStyleSheet("background-color: #5D5D5D; color: white; padding: 8px;")
-        self.btn_keyword_recommend.setEnabled(False)
-        keyword_layout.addWidget(self.btn_keyword_recommend)
+        mode_row.addWidget(self.keyword_frame)
         
-        topic_layout.addWidget(self.keyword_frame)
+        topic_layout.addLayout(mode_row)
         
-        # 방식 3: 직접 입력
-        self.radio_use_manual = QRadioButton("✏️ 주제 직접 입력하기")
-        self.radio_use_manual.toggled.connect(self.toggle_topic_mode)
-        self.topic_mode_group.addButton(self.radio_use_manual, 2)
-        topic_layout.addWidget(self.radio_use_manual)
+        # 주제 생성 버튼 (통합)
+        self.btn_generate_topic = QPushButton("🚀 주제 생성하기")
+        self.btn_generate_topic.clicked.connect(self.generate_topics)
+        self.btn_generate_topic.setStyleSheet("""
+            background-color: #5D5D5D; 
+            color: white; 
+            padding: 10px; 
+            font-weight: bold;
+        """)
+        topic_layout.addWidget(self.btn_generate_topic)
         
-        # 직접 입력 영역
-        self.manual_frame = QFrame()
-        manual_layout = QVBoxLayout(self.manual_frame)
-        manual_layout.setContentsMargins(20, 5, 0, 10)
+        # 구분선
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setStyleSheet("color: #ddd;")
+        topic_layout.addWidget(divider)
         
-        self.manual_topic = QLineEdit()
-        self.manual_topic.setPlaceholderText("주제를 직접 입력하세요 (예: 전기차 충전 요금 비교)")
-        self.manual_topic.setEnabled(False)
-        manual_layout.addWidget(self.manual_topic)
-        
-        topic_layout.addWidget(self.manual_frame)
-        
-        # 추천 주제 표시 영역 (공통)
-        topic_layout.addWidget(QLabel("📋 추천 주제 선택:"))
+        # 생성된 주제 표시 영역
+        topic_layout.addWidget(QLabel("📋 생성된 주제 선택:"))
         
         self.topic_area = QScrollArea()
         self.topic_area.setWidgetResizable(True)
@@ -434,67 +420,61 @@ class InfoTab(QWidget):
             self.lbl_regenerate_count.setStyleSheet("color: #888; font-size: 11px;")
 
     def toggle_topic_mode(self):
-        """주제 입력 모드 토글"""
+        """주제 입력 모드 토글 (카테고리 vs 키워드)"""
         use_category = self.radio_use_category.isChecked()
         use_keyword = self.radio_use_keyword.isChecked()
-        use_manual = self.radio_use_manual.isChecked()
         
         # 카테고리 모드
         self.combo_cat.setEnabled(use_category)
-        self.btn_recommend.setEnabled(use_category)
         
         # 키워드 모드
         self.input_keywords.setEnabled(use_keyword)
-        self.btn_keyword_recommend.setEnabled(use_keyword)
         
-        # 직접 입력 모드
-        self.manual_topic.setEnabled(use_manual)
-        
-        # 추천 주제 영역은 카테고리/키워드 모드에서 활성화
-        self.topic_area.setEnabled(use_category or use_keyword)
-        
-        # 스타일 변경
-        self.category_frame.setStyleSheet("" if use_category else "color: #999;")
-        self.keyword_frame.setStyleSheet("" if use_keyword else "color: #999;")
-        self.manual_frame.setStyleSheet("" if use_manual else "color: #999;")
+        # 프레임 스타일 변경 (선택된 모드 강조)
+        if use_category:
+            self.category_frame.setStyleSheet("QFrame { border: 2px solid #4A90E2; border-radius: 5px; background-color: #f0f8ff; }")
+            self.keyword_frame.setStyleSheet("QFrame { border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9; }")
+        else:
+            self.category_frame.setStyleSheet("QFrame { border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9; }")
+            self.keyword_frame.setStyleSheet("QFrame { border: 2px solid #4A90E2; border-radius: 5px; background-color: #f0f8ff; }")
 
     def get_selected_topic(self):
         """선택된 주제 반환"""
-        if self.radio_use_manual.isChecked():
-            return self.manual_topic.text().strip()
-        
         selected_btn = self.topic_group.checkedButton()
         if selected_btn:
             return selected_btn.text()
         return None
-
-    def get_recommendations(self):
-        """AI 추천 주제 받기 (카테고리 기반)"""
+    
+    def generate_topics(self):
+        """통합 주제 생성 함수 (선택된 모드에 따라 분기)"""
+        if self.radio_use_category.isChecked():
+            self._generate_by_category()
+        else:
+            self._generate_by_keywords()
+    
+    def _generate_by_category(self):
+        """카테고리 기반 주제 생성"""
         category = self.combo_cat.currentText()
         self.log_signal.emit(f"🤖 '{category}' 관련 최신 트렌드를 분석 중입니다...")
         
-        self.btn_recommend.setEnabled(False)
-        self.btn_recommend.setText("⏳ 트렌드 분석 중...")
-        self.btn_recommend.setStyleSheet("background-color: #888; color: white; padding: 8px;")
+        self.btn_generate_topic.setEnabled(False)
+        self.btn_generate_topic.setText("⏳ 트렌드 분석 중...")
+        self.btn_generate_topic.setStyleSheet("background-color: #888; color: white; padding: 10px; font-weight: bold;")
         
         self._clear_topic_list()
         
-        self.recommend_worker = RecommendWorker(category)
-        self.recommend_worker.finished.connect(self.on_recommend_finished)
-        self.recommend_worker.error.connect(self.on_recommend_error)
-        self.recommend_worker.start()
-
-    def on_recommend_finished(self, topics: list):
-        """추천 완료"""
-        self.btn_recommend.setEnabled(True)
-        self.btn_recommend.setText("✅ 추천 완료! (다시 받기)")
-        self.btn_recommend.setStyleSheet("background-color: #27AE60; color: white; padding: 8px;")
+        # 이전 워커가 있으면 정리
+        if self.recommend_worker and self.recommend_worker.isRunning():
+            self.recommend_worker.quit()
+            self.recommend_worker.wait(500)
         
-        self._display_recommended_topics(topics)
-        self.log_signal.emit(f"✅ {len(topics)}개의 트렌드 주제가 추천되었습니다.")
-
-    def get_keyword_recommendations(self):
-        """키워드 기반 AI 추천 주제 받기"""
+        self.recommend_worker = RecommendWorker(category)
+        self.recommend_worker.finished.connect(self._on_topic_generated)
+        self.recommend_worker.error.connect(self._on_topic_error)
+        self.recommend_worker.start()
+    
+    def _generate_by_keywords(self):
+        """키워드 기반 주제 생성"""
         keywords_text = self.input_keywords.text().strip()
         if not keywords_text:
             self.log_signal.emit("⚠️ 키워드를 입력해주세요.")
@@ -506,34 +486,38 @@ class InfoTab(QWidget):
             self.log_signal.emit("⚠️ 유효한 키워드를 입력해주세요.")
             return
         
-        self.log_signal.emit(f"🔑 키워드 '{', '.join(keywords)}' 기반 주제 추천 중...")
+        self.log_signal.emit(f"🔑 키워드 '{', '.join(keywords)}' 기반 주제 생성 중...")
         
-        self.btn_keyword_recommend.setEnabled(False)
-        self.btn_keyword_recommend.setText("⏳ 분석 중...")
-        self.btn_keyword_recommend.setStyleSheet("background-color: #888; color: white; padding: 8px;")
+        self.btn_generate_topic.setEnabled(False)
+        self.btn_generate_topic.setText("⏳ 분석 중...")
+        self.btn_generate_topic.setStyleSheet("background-color: #888; color: white; padding: 10px; font-weight: bold;")
         
-        # 기존 주제 목록 초기화
         self._clear_topic_list()
         
+        # 이전 워커가 있으면 정리
+        if self.keyword_recommend_worker and self.keyword_recommend_worker.isRunning():
+            self.keyword_recommend_worker.quit()
+            self.keyword_recommend_worker.wait(500)
+        
         self.keyword_recommend_worker = KeywordRecommendWorker(keywords)
-        self.keyword_recommend_worker.finished.connect(self.on_keyword_recommend_finished)
-        self.keyword_recommend_worker.error.connect(self.on_keyword_recommend_error)
+        self.keyword_recommend_worker.finished.connect(self._on_topic_generated)
+        self.keyword_recommend_worker.error.connect(self._on_topic_error)
         self.keyword_recommend_worker.start()
-
-    def on_keyword_recommend_finished(self, topics: list):
-        """키워드 추천 완료"""
-        self.btn_keyword_recommend.setEnabled(True)
-        self.btn_keyword_recommend.setText("✅ 추천 완료! (다시 받기)")
-        self.btn_keyword_recommend.setStyleSheet("background-color: #27AE60; color: white; padding: 8px;")
+    
+    def _on_topic_generated(self, topics: list):
+        """주제 생성 완료 (공통 핸들러)"""
+        self.btn_generate_topic.setEnabled(True)
+        self.btn_generate_topic.setText("✅ 생성 완료! (다시 생성)")
+        self.btn_generate_topic.setStyleSheet("background-color: #27AE60; color: white; padding: 10px; font-weight: bold;")
         
         self._display_recommended_topics(topics)
-        self.log_signal.emit(f"✅ 키워드 기반 {len(topics)}개 주제가 추천되었습니다.")
-
-    def on_keyword_recommend_error(self, error_msg: str):
-        """키워드 추천 에러"""
-        self.btn_keyword_recommend.setEnabled(True)
-        self.btn_keyword_recommend.setText("✨ 키워드로 주제 추천 받기")
-        self.btn_keyword_recommend.setStyleSheet("background-color: #5D5D5D; color: white; padding: 8px;")
+        self.log_signal.emit(f"✅ {len(topics)}개의 주제가 생성되었습니다.")
+    
+    def _on_topic_error(self, error_msg: str):
+        """주제 생성 에러 (공통 핸들러)"""
+        self.btn_generate_topic.setEnabled(True)
+        self.btn_generate_topic.setText("🚀 주제 생성하기")
+        self.btn_generate_topic.setStyleSheet("background-color: #5D5D5D; color: white; padding: 10px; font-weight: bold;")
         self.log_signal.emit(f"❌ {error_msg}")
 
     def _clear_topic_list(self):
@@ -568,13 +552,6 @@ class InfoTab(QWidget):
                 self.thumbnail_regenerate_count = 0
                 self.update_regenerate_count_label()
                 self.generate_thumbnail_auto()
-
-    def on_recommend_error(self, error_msg: str):
-        """추천 에러"""
-        self.btn_recommend.setEnabled(True)
-        self.btn_recommend.setText("✨ AI 추천 주제 받기 (실시간 트렌드 반영)")
-        self.btn_recommend.setStyleSheet("background-color: #5D5D5D; color: white; padding: 8px;")
-        self.log_signal.emit(f"❌ {error_msg}")
 
     def run_analysis(self):
         """주제 분석 실행"""
