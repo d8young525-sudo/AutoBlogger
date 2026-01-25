@@ -138,45 +138,71 @@ class InfoTab(QWidget):
         group_topic = QGroupBox("1. 주제 기획")
         topic_layout = QVBoxLayout()
         
-        # ===== 주제 생성 방식 선택 (라디오 + 입력필드 한 줄) =====
-        input_row = QHBoxLayout()
+        # ===== 카드형 좌우 배치 =====
+        cards_row = QHBoxLayout()
+        cards_row.setSpacing(10)
         self.topic_mode_group = QButtonGroup()
         
-        # 카테고리 선택 (라디오 + 드롭다운)
+        # 좌측 카드: 카테고리에서 주제 생성
+        left_card = QFrame()
+        left_card.setStyleSheet("""
+            QFrame { 
+                border: 2px solid #03C75A; 
+                border-radius: 8px; 
+                background-color: #f8fff8; 
+                padding: 10px;
+            }
+        """)
+        left_layout = QVBoxLayout(left_card)
+        
         self.radio_use_category = QRadioButton("📂 카테고리에서 주제 생성")
         self.radio_use_category.setChecked(True)
         self.radio_use_category.toggled.connect(self.toggle_topic_mode)
+        self.radio_use_category.setStyleSheet("font-weight: bold; font-size: 13px;")
         self.topic_mode_group.addButton(self.radio_use_category, 0)
-        input_row.addWidget(self.radio_use_category)
+        left_layout.addWidget(self.radio_use_category)
         
         self.combo_cat = QComboBox()
         self.combo_cat.setEditable(True)
-        self.combo_cat.setMinimumWidth(150)
         self.combo_cat.addItems([
             "차량 관리 상식", "자동차 보험/사고처리", "리스/렌트/할부 금융", 
             "교통법규/범칙금", "자동차 여행 코스", "전기차 라이프", "중고차 거래 팁"
         ])
-        input_row.addWidget(self.combo_cat)
+        left_layout.addWidget(self.combo_cat)
         
-        # 구분선
-        separator = QLabel("  |  ")
-        separator.setStyleSheet("color: #999;")
-        input_row.addWidget(separator)
+        cards_row.addWidget(left_card, 1)  # stretch factor 1
         
-        # 키워드 기반 (라디오 + 텍스트 입력)
+        # 우측 카드: 키워드 기반 주제 생성
+        right_card = QFrame()
+        right_card.setStyleSheet("""
+            QFrame { 
+                border: 2px solid #ddd; 
+                border-radius: 8px; 
+                background-color: #fafafa; 
+                padding: 10px;
+            }
+        """)
+        right_layout = QVBoxLayout(right_card)
+        
         self.radio_use_keyword = QRadioButton("✏️ 키워드 기반 주제 생성")
         self.radio_use_keyword.toggled.connect(self.toggle_topic_mode)
+        self.radio_use_keyword.setStyleSheet("font-weight: bold; font-size: 13px;")
         self.topic_mode_group.addButton(self.radio_use_keyword, 1)
-        input_row.addWidget(self.radio_use_keyword)
+        right_layout.addWidget(self.radio_use_keyword)
         
         self.manual_topic = QLineEdit()
         self.manual_topic.setPlaceholderText("키워드 입력 (예: 전기차 충전)")
-        self.manual_topic.setMinimumWidth(150)
-        self.manual_topic.setEnabled(False)  # 초기에는 비활성화
-        input_row.addWidget(self.manual_topic)
+        self.manual_topic.setEnabled(False)
+        self.manual_topic.setStyleSheet("background-color: #eee;")
+        right_layout.addWidget(self.manual_topic)
         
-        input_row.addStretch()
-        topic_layout.addLayout(input_row)
+        cards_row.addWidget(right_card, 1)  # stretch factor 1 (동일 비율)
+        
+        # 카드 참조 저장 (스타일 변경용)
+        self.left_card = left_card
+        self.right_card = right_card
+        
+        topic_layout.addLayout(cards_row)
         
         # ===== 주제 생성 버튼 (전체 너비) =====
         self.btn_generate_topic = QPushButton("✨ 주제 생성하기")
@@ -187,6 +213,7 @@ class InfoTab(QWidget):
             padding: 12px; 
             font-weight: bold;
             font-size: 14px;
+            margin-top: 10px;
         """)
         topic_layout.addWidget(self.btn_generate_topic)
         
@@ -197,7 +224,7 @@ class InfoTab(QWidget):
         
         self.topic_area = QScrollArea()
         self.topic_area.setWidgetResizable(True)
-        self.topic_area.setMinimumHeight(120)
+        self.topic_area.setMinimumHeight(100)
         self.topic_area.setStyleSheet("QScrollArea { border: 1px solid #ddd; background-color: #fafafa; }")
         self.topic_widget = QWidget()
         self.topic_group = QButtonGroup()
@@ -230,14 +257,11 @@ class InfoTab(QWidget):
         group_topic.setLayout(topic_layout)
         layout.addWidget(group_topic)
 
-        # ========== 2. 세부 설정 ==========
-        self.group_adv = QGroupBox("2. 세부 설정")
-        self.group_adv.setCheckable(True)
-        self.group_adv.setChecked(False)
-        self.group_adv.toggled.connect(self.on_detail_settings_toggled)
+        # ========== 2. 세부 설정 (항상 표시) ==========
+        group_adv = QGroupBox("2. 세부 설정")
         adv_layout = QVBoxLayout()
         
-        self.btn_analyze = QPushButton("🔍 주제 분석하기 (타겟/질문 추출)")
+        self.btn_analyze = QPushButton("🔍 주제 분석하기 (타겟/질문 자동 추출)")
         self.btn_analyze.clicked.connect(self.run_analysis)
         self.btn_analyze.setStyleSheet("background-color: #4A90E2; color: white; padding: 10px; font-weight: bold;")
         adv_layout.addWidget(self.btn_analyze)
@@ -317,8 +341,11 @@ class InfoTab(QWidget):
         self.chk_use_thumbnail.setEnabled(False)
         adv_layout.addWidget(self.chk_use_thumbnail)
         
-        self.group_adv.setLayout(adv_layout)
-        layout.addWidget(self.group_adv)
+        group_adv.setLayout(adv_layout)
+        layout.addWidget(group_adv)
+        
+        # 레거시 호환용 (self.group_adv 참조 유지)
+        self.group_adv = group_adv
 
         # ========== 3. 원고 생성 버튼 ==========
         self.btn_generate = QPushButton("📝 원고 생성")
@@ -357,21 +384,9 @@ class InfoTab(QWidget):
         main_layout.addWidget(scroll)
         self.setLayout(main_layout)
 
-    def on_detail_settings_toggled(self, checked: bool):
-        """세부 설정 펼침/접힘 시 호출"""
-        if checked:
-            # 세부 설정을 펼칠 때 썸네일 자동 생성
-            topic = self.get_selected_topic()
-            if topic:
-                # 주제가 변경되었는지 확인
-                if topic != self.current_topic_for_thumbnail:
-                    self.current_topic_for_thumbnail = topic
-                    self.thumbnail_regenerate_count = 0
-                    self.update_regenerate_count_label()
-                    self.generate_thumbnail_auto()
-                elif not self.thumbnail_image:
-                    # 같은 주제인데 썸네일이 없으면 생성
-                    self.generate_thumbnail_auto()
+    def on_detail_settings_toggled(self, checked: bool = True):
+        """세부 설정 관련 처리 (레거시 호환용 - 이제 항상 표시됨)"""
+        pass  # 세부 설정이 항상 표시되므로 별도 처리 불필요
 
     def generate_thumbnail_auto(self):
         """썸네일 자동 생성 (세부설정 펼칠 때)"""
@@ -418,16 +433,50 @@ class InfoTab(QWidget):
             self.lbl_regenerate_count.setStyleSheet("color: #888; font-size: 11px;")
 
     def toggle_topic_mode(self):
-        """주제 입력 모드 토글 - 선택에 따라 입력 필드 활성화/비활성화"""
+        """주제 입력 모드 토글 - 선택에 따라 카드 스타일 및 입력 필드 활성화/비활성화"""
         if self.radio_use_category.isChecked():
+            # 카테고리 카드 활성화
+            self.left_card.setStyleSheet("""
+                QFrame { 
+                    border: 2px solid #03C75A; 
+                    border-radius: 8px; 
+                    background-color: #f8fff8; 
+                    padding: 10px;
+                }
+            """)
+            self.right_card.setStyleSheet("""
+                QFrame { 
+                    border: 2px solid #ddd; 
+                    border-radius: 8px; 
+                    background-color: #fafafa; 
+                    padding: 10px;
+                }
+            """)
             self.combo_cat.setEnabled(True)
-            self.manual_topic.setEnabled(False)
-            self.manual_topic.setStyleSheet("background-color: #f0f0f0;")
             self.combo_cat.setStyleSheet("")
+            self.manual_topic.setEnabled(False)
+            self.manual_topic.setStyleSheet("background-color: #eee;")
         else:
+            # 키워드 카드 활성화
+            self.left_card.setStyleSheet("""
+                QFrame { 
+                    border: 2px solid #ddd; 
+                    border-radius: 8px; 
+                    background-color: #fafafa; 
+                    padding: 10px;
+                }
+            """)
+            self.right_card.setStyleSheet("""
+                QFrame { 
+                    border: 2px solid #4A90E2; 
+                    border-radius: 8px; 
+                    background-color: #f8f8ff; 
+                    padding: 10px;
+                }
+            """)
             self.combo_cat.setEnabled(False)
+            self.combo_cat.setStyleSheet("background-color: #eee;")
             self.manual_topic.setEnabled(True)
-            self.combo_cat.setStyleSheet("background-color: #f0f0f0;")
             self.manual_topic.setStyleSheet("")
 
     def get_selected_topic(self):
@@ -541,12 +590,11 @@ class InfoTab(QWidget):
                 self.chk_use_thumbnail.setChecked(False)
                 self.chk_use_thumbnail.setEnabled(False)
                 
-                # 세부설정이 펼쳐져 있으면 자동 생성
-                if self.group_adv.isChecked():
-                    self.current_topic_for_thumbnail = new_topic
-                    self.thumbnail_regenerate_count = 0
-                    self.update_regenerate_count_label()
-                    self.generate_thumbnail_auto()
+                # 새 주제 선택 시 썸네일 자동 생성
+                self.current_topic_for_thumbnail = new_topic
+                self.thumbnail_regenerate_count = 0
+                self.update_regenerate_count_label()
+                self.generate_thumbnail_auto()
 
     def on_recommend_error(self, error_msg: str):
         """추천 에러"""
