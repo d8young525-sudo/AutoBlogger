@@ -322,6 +322,13 @@ def run_gui():
 
     # Run application
     app = QApplication(sys.argv)
+    
+    # 기본 폰트를 QApplication 레벨에서 설정 (QSS font-size 상속 버그 방지)
+    from PySide6.QtGui import QFont
+    default_font = QFont("Malgun Gothic", 10)
+    default_font.setStyleHint(QFont.SansSerif)
+    app.setFont(default_font)
+    
     app.setStyleSheet(get_app_stylesheet())
     window = MainWindow()
     window.show()

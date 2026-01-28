@@ -44,8 +44,6 @@ def get_app_stylesheet() -> str:
     QMainWindow, QWidget {{
         background-color: {BG_MAIN};
         color: {TEXT_PRIMARY};
-        font-family: "Malgun Gothic", "맑은 고딕", sans-serif;
-        font-size: 13px;
     }}
 
     /* ============================================ */
@@ -372,7 +370,6 @@ def get_app_stylesheet() -> str:
     QRadioButton, QCheckBox {{
         spacing: 8px;
         color: {TEXT_PRIMARY};
-        font-size: 13px;
     }}
 
     QRadioButton::indicator, QCheckBox::indicator {{
@@ -409,7 +406,6 @@ def get_app_stylesheet() -> str:
     /* ============================================ */
     QLabel {{
         color: {TEXT_PRIMARY};
-        font-size: 13px;
     }}
 
     /* ============================================ */
