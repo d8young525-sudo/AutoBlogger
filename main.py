@@ -35,6 +35,7 @@ def run_gui():
         from ui.writing_settings_tab import WritingSettingsTab
         from ui.delivery_tab import DeliveryTab
         from ui.login_dialog import LoginDialog
+        from ui.styles import get_app_stylesheet
         from core.worker import AutomationWorker
         
     except ImportError as e:
@@ -59,13 +60,13 @@ def run_gui():
 
             # 상단 사용자 정보 바
             user_bar = QHBoxLayout()
-            self.lbl_user_email = QLabel("🔒 로그인이 필요합니다")
-            self.lbl_user_email.setStyleSheet("color: #666; font-weight: bold;")
+            self.lbl_user_email = QLabel("로그인이 필요합니다")
+            self.lbl_user_email.setStyleSheet("color: #888; font-weight: bold;")
             self.lbl_subscription = QLabel("")
-            self.lbl_subscription.setStyleSheet("color: #27AE60; font-size: 12px;")
+            self.lbl_subscription.setStyleSheet("font-size: 12px;")
             
-            self.btn_logout = QPushButton("🚪 로그아웃")
-            self.btn_logout.setStyleSheet("background-color: #E74C3C; color: white; padding: 5px 10px;")
+            self.btn_logout = QPushButton("로그아웃")
+            self.btn_logout.setObjectName("dangerButton")
             self.btn_logout.clicked.connect(self.do_logout)
             self.btn_logout.hide()
             
@@ -77,7 +78,7 @@ def run_gui():
 
             # 구분선
             line = QLabel()
-            line.setStyleSheet("border-bottom: 1px solid #ddd; margin: 5px 0;")
+            line.setStyleSheet("border-bottom: 1px solid #E0E0E0; margin: 5px 0;")
             line.setFixedHeight(2)
             layout.addWidget(line)
 
@@ -95,15 +96,15 @@ def run_gui():
             self.tab_delivery = DeliveryTab(writing_settings_tab=self.tab_writing_settings)
             
             # 탭 추가 (순서 변경: 글쓰기 환경설정을 환경설정 앞에)
-            self.tabs.addTab(self.tab_info, "📝 정보성 글쓰기")
-            self.tabs.addTab(self.tab_delivery, "🚗 출고 후기")
-            self.tabs.addTab(self.tab_writing_settings, "✍️ 글쓰기 환경설정")
-            self.tabs.addTab(self.tab_settings, "⚙️ 환경 설정")
+            self.tabs.addTab(self.tab_info, "정보성 글쓰기")
+            self.tabs.addTab(self.tab_delivery, "출고 후기")
+            self.tabs.addTab(self.tab_writing_settings, "글쓰기 환경설정")
+            self.tabs.addTab(self.tab_settings, "환경 설정")
             
             layout.addWidget(self.tabs)
 
             # Log area
-            layout.addWidget(QLabel("📋 시스템 로그"))
+            layout.addWidget(QLabel("시스템 로그"))
             self.log_area = QTextEdit()
             self.log_area.setReadOnly(True)
             self.log_area.setMaximumHeight(150)
@@ -210,14 +211,16 @@ def run_gui():
             """상단 사용자 정보 표시 업데이트"""
             if self.user_info:
                 email = self.user_info.get("email", "")
-                self.lbl_user_email.setText(f"✅ {email}")
-                self.lbl_user_email.setStyleSheet("color: #27AE60; font-weight: bold;")
+                self.lbl_user_email.setText(email)
+                self.lbl_user_email.setStyleSheet("color: #2D6A4F; font-weight: bold;")
                 
                 is_admin = self.user_info.get("is_admin", False)
                 if is_admin:
-                    self.lbl_subscription.setText("👑 관리자")
+                    self.lbl_subscription.setText("관리자")
+                    self.lbl_subscription.setStyleSheet("color: #D4A853; font-weight: bold; font-size: 12px;")
                 else:
-                    self.lbl_subscription.setText("🎫 정식 사용자")
+                    self.lbl_subscription.setText("정식 사용자")
+                    self.lbl_subscription.setStyleSheet("color: #27AE60; font-size: 12px;")
                 
                 self.btn_logout.show()
                 
@@ -319,6 +322,7 @@ def run_gui():
 
     # Run application
     app = QApplication(sys.argv)
+    app.setStyleSheet(get_app_stylesheet())
     window = MainWindow()
     window.show()
     

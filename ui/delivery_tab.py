@@ -19,7 +19,9 @@ from PySide6.QtGui import QPixmap, QImage
 
 import requests
 
-BACKEND_URL = "https://generate-blog-post-yahp6ia25q-du.a.run.app"
+from config import Config
+
+BACKEND_URL = Config.BACKEND_URL
 
 
 class ImageProcessWorker(QThread):
@@ -82,7 +84,7 @@ class DeliveryPostWorker(QThread):
     def run(self):
         """포스팅 내용 생성"""
         try:
-            self.log.emit("🚀 AI 출고 후기 작성 요청 중...")
+            self.log.emit("AI 출고 후기 작성 요청 중...")
             
             # 프롬프트 구성
             customer_info = self.data.get('customer_info', {})
@@ -126,7 +128,7 @@ class DeliveryPostWorker(QThread):
             
             if response.status_code == 200:
                 result = response.json()
-                self.log.emit("✅ 출고 후기 생성 완료!")
+                self.log.emit("출고 후기 생성 완료!")
                 self.finished.emit(result)
             else:
                 self.error.emit(f"서버 에러 ({response.status_code}): {response.text[:200]}")
@@ -162,13 +164,13 @@ class DeliveryTab(QWidget):
         
         # 사진 선택 버튼들
         btn_layout = QHBoxLayout()
-        self.btn_add_photos = QPushButton("📷 사진 추가")
+        self.btn_add_photos = QPushButton("사진 추가")
+        self.btn_add_photos.setObjectName("infoButton")
         self.btn_add_photos.clicked.connect(self.add_photos)
-        self.btn_add_photos.setStyleSheet("background-color: #4A90E2; color: white; padding: 8px;")
         
-        self.btn_clear_photos = QPushButton("🗑️ 전체 삭제")
+        self.btn_clear_photos = QPushButton("전체 삭제")
+        self.btn_clear_photos.setObjectName("dangerButton")
         self.btn_clear_photos.clicked.connect(self.clear_photos)
-        self.btn_clear_photos.setStyleSheet("background-color: #E74C3C; color: white; padding: 8px;")
         
         btn_layout.addWidget(self.btn_add_photos)
         btn_layout.addWidget(self.btn_clear_photos)
@@ -191,7 +193,7 @@ class DeliveryTab(QWidget):
         photo_layout.addLayout(privacy_layout)
         
         # 블러 처리 안내
-        lbl_privacy_notice = QLabel("⚠️ 얼굴과 번호판은 개인정보 보호를 위해 블러 처리를 권장합니다.")
+        lbl_privacy_notice = QLabel("얼굴과 번호판은 개인정보 보호를 위해 블러 처리를 권장합니다.")
         lbl_privacy_notice.setStyleSheet("color: #E67E22; font-size: 12px;")
         photo_layout.addWidget(lbl_privacy_notice)
         
@@ -266,25 +268,25 @@ class DeliveryTab(QWidget):
         layout.addWidget(group_review)
         
         # 5. 실행 버튼 (작성 스타일 섹션 제거됨 - 글쓰기 환경설정에서 관리)
-        style_notice = QLabel("💡 작성 스타일(말투, 분량 등)은 [글쓰기 환경설정] 탭에서 통합 관리됩니다.")
-        style_notice.setStyleSheet("color: #666; font-size: 11px; padding: 5px 0;")
+        style_notice = QLabel("작성 스타일(말투, 분량 등)은 [글쓰기 환경설정] 탭에서 통합 관리됩니다.")
+        style_notice.setStyleSheet("color: #888; font-size: 12px; padding: 5px 0;")
         layout.addWidget(style_notice)
         
-        self.btn_generate = QPushButton("📝 후기 글 생성하기")
-        self.btn_generate.setStyleSheet("background-color: #03C75A; color: white; font-weight: bold; padding: 15px; font-size: 16px;")
+        self.btn_generate = QPushButton("후기 글 생성하기")
+        self.btn_generate.setObjectName("primaryButton")
         self.btn_generate.clicked.connect(self.generate_review)
         layout.addWidget(self.btn_generate)
         
         # 6. 결과 미리보기
-        layout.addWidget(QLabel("📝 생성된 후기 미리보기"))
+        layout.addWidget(QLabel("생성된 후기 미리보기"))
         self.result_view = QTextEdit()
         self.result_view.setMinimumHeight(300)
         self.result_view.setPlaceholderText("생성된 출고 후기가 여기에 표시됩니다.")
         layout.addWidget(self.result_view)
         
         # 하단 발행 버튼
-        self.btn_publish = QPushButton("📤 현재 내용으로 발행하기")
-        self.btn_publish.setStyleSheet("background-color: #4A90E2; color: white; font-weight: bold; padding: 15px; font-size: 16px;")
+        self.btn_publish = QPushButton("현재 내용으로 발행하기")
+        self.btn_publish.setObjectName("secondaryButton")
         self.btn_publish.clicked.connect(self.publish_now)
         self.btn_publish.setEnabled(False)
         layout.addWidget(self.btn_publish)
@@ -306,18 +308,18 @@ class DeliveryTab(QWidget):
             for file in files:
                 if file not in self.image_paths:
                     self.image_paths.append(file)
-                    item = QListWidgetItem(f"📷 {os.path.basename(file)}")
+                    item = QListWidgetItem(os.path.basename(file))
                     item.setData(Qt.UserRole, file)
                     self.photo_list.addItem(item)
                     
-            self.log_signal.emit(f"✅ {len(files)}개 사진이 추가되었습니다.")
+            self.log_signal.emit(f"{len(files)}개 사진이 추가되었습니다.")
             
     def clear_photos(self):
         """모든 사진 삭제"""
         self.image_paths.clear()
         self.processed_paths.clear()
         self.photo_list.clear()
-        self.log_signal.emit("🗑️ 모든 사진이 삭제되었습니다.")
+        self.log_signal.emit("모든 사진이 삭제되었습니다.")
         
     def get_form_data(self) -> dict:
         """폼 데이터 수집"""
@@ -366,7 +368,7 @@ class DeliveryTab(QWidget):
         data['mode'] = 'delivery'
         
         self.btn_generate.setEnabled(False)
-        self.btn_generate.setText("⏳ 생성 중...")
+        self.btn_generate.setText("생성 중...")
         
         self.worker = DeliveryPostWorker(data)
         self.worker.finished.connect(self.on_generation_finished)
@@ -377,20 +379,20 @@ class DeliveryTab(QWidget):
     def on_generation_finished(self, result: dict):
         """생성 완료 처리"""
         self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("✅ 생성 완료!")
+        self.btn_generate.setText("생성 완료!")
         
         title = result.get('title', '출고 후기')
         content = result.get('content', '') or result.get('content_text', '')
         
         self.result_view.setText(f"제목: {title}\n\n{content}")
         self.btn_publish.setEnabled(True)
-        self.log_signal.emit("✅ 출고 후기 생성 완료! 확인 후 발행해주세요.")
+        self.log_signal.emit("출고 후기 생성 완료! 확인 후 발행해주세요.")
         
     def on_generation_error(self, error_msg: str):
         """에러 처리"""
         self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("📝 후기 글 생성하기")
-        self.log_signal.emit(f"❌ {error_msg}")
+        self.btn_generate.setText("후기 글 생성하기")
+        self.log_signal.emit(f"{error_msg}")
         
     def publish_now(self):
         """현재 내용 발행"""
@@ -428,10 +430,10 @@ class DeliveryTab(QWidget):
         
         self.result_view.setText(f"제목: {title}\n\n{content}")
         self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("✅ 생성 완료!")
+        self.btn_generate.setText("생성 완료!")
         self.btn_publish.setEnabled(True)
 
     def reset_generate_button(self):
         """생성 버튼 초기화 (에러 시 호출)"""
         self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("📝 후기 글 생성하기")
+        self.btn_generate.setText("후기 글 생성하기")

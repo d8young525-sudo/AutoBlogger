@@ -34,11 +34,11 @@ class WritingSettingsTab(QWidget):
         layout = QVBoxLayout(content_widget)
         
         # ========== 1. 탭별 블로그 카테고리 설정 ==========
-        group_category = QGroupBox("📁 블로그 카테고리 설정")
+        group_category = QGroupBox("블로그 카테고리 설정")
         category_layout = QVBoxLayout()
         
         category_desc = QLabel("각 탭에서 생성되는 컨텐츠가 업로드될 블로그 카테고리를 미리 설정합니다.\n실제 블로그에 등록된 카테고리명과 정확히 일치해야 합니다.")
-        category_desc.setStyleSheet("color: #666; font-size: 11px; margin-bottom: 10px;")
+        category_desc.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 10px;")
         category_desc.setWordWrap(True)
         category_layout.addWidget(category_desc)
         
@@ -47,16 +47,16 @@ class WritingSettingsTab(QWidget):
         # 정보성 글쓰기 카테고리
         self.input_info_category = QLineEdit()
         self.input_info_category.setPlaceholderText("예: 자동차정보/유용한팁")
-        cat_form.addRow("📝 정보성 글쓰기:", self.input_info_category)
+        cat_form.addRow("정보성 글쓰기:", self.input_info_category)
         
         # 출고후기 카테고리
         self.input_delivery_category = QLineEdit()
         self.input_delivery_category.setPlaceholderText("예: 출고후기/고객이야기")
-        cat_form.addRow("🚗 출고후기:", self.input_delivery_category)
+        cat_form.addRow("출고후기:", self.input_delivery_category)
         
         category_layout.addLayout(cat_form)
         
-        category_notice = QLabel("💡 카테고리명은 대/소분류 포함 전체 경로로 입력하세요 (예: 자동차/유지관리)")
+        category_notice = QLabel("카테고리명은 대/소분류 포함 전체 경로로 입력하세요 (예: 자동차/유지관리)")
         category_notice.setStyleSheet("color: #888; font-size: 11px; margin-top: 5px;")
         category_layout.addWidget(category_notice)
         
@@ -64,11 +64,11 @@ class WritingSettingsTab(QWidget):
         layout.addWidget(group_category)
         
         # ========== 2. 스타일 설정 ==========
-        group_style = QGroupBox("✍️ 기본 작성 스타일")
+        group_style = QGroupBox("기본 작성 스타일")
         style_layout = QVBoxLayout()
         
         style_desc = QLabel("글 생성 시 기본으로 적용될 작성 스타일을 설정합니다.")
-        style_desc.setStyleSheet("color: #666; font-size: 11px;")
+        style_desc.setStyleSheet("color: #888; font-size: 12px;")
         style_layout.addWidget(style_desc)
         
         style_form = QFormLayout()
@@ -98,18 +98,18 @@ class WritingSettingsTab(QWidget):
         layout.addWidget(group_style)
         
         # ========== 3. 썸네일 이미지 설정 ==========
-        group_thumbnail = QGroupBox("🖼️ 썸네일 이미지 설정")
+        group_thumbnail = QGroupBox("썸네일 이미지 설정")
         thumb_layout = QVBoxLayout()
         
         thumb_desc = QLabel("원고 생성 후 대표 썸네일 이미지 생성 관련 설정입니다.")
-        thumb_desc.setStyleSheet("color: #666; font-size: 11px;")
+        thumb_desc.setStyleSheet("color: #888; font-size: 12px;")
         thumb_layout.addWidget(thumb_desc)
         
         self.chk_auto_thumbnail = QCheckBox("원고 생성 후 자동으로 썸네일 생성")
         self.chk_auto_thumbnail.setChecked(True)
         thumb_layout.addWidget(self.chk_auto_thumbnail)
         
-        thumb_notice = QLabel("💡 썸네일은 주제를 기반으로 AI가 자동 생성합니다.")
+        thumb_notice = QLabel("썸네일은 주제를 기반으로 AI가 자동 생성합니다.")
         thumb_notice.setStyleSheet("color: #888; font-size: 11px;")
         thumb_layout.addWidget(thumb_notice)
         
@@ -117,16 +117,16 @@ class WritingSettingsTab(QWidget):
         layout.addWidget(group_thumbnail)
         
         # ========== 4. 네이버 에디터 서식 설정 ==========
-        group_naver_style = QGroupBox("🎨 네이버 에디터 서식 설정")
+        group_naver_style = QGroupBox("네이버 에디터 서식 설정")
         naver_style_layout = QVBoxLayout()
         
         naver_desc = QLabel("네이버 블로그 에디터에 적용할 서식을 설정합니다.\nJSON 생성 시 이 설정값이 자동 적용됩니다.")
-        naver_desc.setStyleSheet("color: #666; font-size: 11px; margin-bottom: 10px;")
+        naver_desc.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 10px;")
         naver_desc.setWordWrap(True)
         naver_style_layout.addWidget(naver_desc)
         
         # 4-1. 폰트 설정
-        font_group = QGroupBox("📝 폰트 설정")
+        font_group = QGroupBox("폰트 설정")
         font_layout = QFormLayout()
         
         self.combo_naver_font = QComboBox()
@@ -169,7 +169,7 @@ class WritingSettingsTab(QWidget):
         naver_style_layout.addWidget(font_group)
         
         # 4-2. 소제목 설정
-        heading_group = QGroupBox("📌 소제목 설정")
+        heading_group = QGroupBox("소제목 설정")
         heading_layout = QFormLayout()
         
         self.combo_heading_style = QComboBox()
@@ -194,7 +194,7 @@ class WritingSettingsTab(QWidget):
         naver_style_layout.addWidget(heading_group)
         
         # 4-3. 인용구 설정
-        quote_group = QGroupBox("💬 인용구 설정")
+        quote_group = QGroupBox("인용구 설정")
         quote_layout = QFormLayout()
         
         self.combo_quote_style = QComboBox()
@@ -230,7 +230,7 @@ class WritingSettingsTab(QWidget):
         naver_style_layout.addWidget(divider_group)
         
         # 4-5. 텍스트 서식 설정
-        text_format_group = QGroupBox("✍️ 텍스트 서식")
+        text_format_group = QGroupBox("텍스트 서식")
         text_format_layout = QVBoxLayout()
         
         # 강조 표현 체크박스
@@ -297,11 +297,11 @@ class WritingSettingsTab(QWidget):
         naver_style_layout.addWidget(align_group)
         
         # 4-7. 스티커 설정 (이모지 대체)
-        sticker_group = QGroupBox("🎨 스티커 설정 (이모지 대체)")
+        sticker_group = QGroupBox("스티커 설정 (이모지 대체)")
         sticker_layout = QVBoxLayout()
         
-        sticker_desc = QLabel("글 생성 시 이모지(🚗, 💡 등) 대신 네이버 에디터 기본 스티커를 사용합니다.")
-        sticker_desc.setStyleSheet("color: #666; font-size: 11px;")
+        sticker_desc = QLabel("글 생성 시 이모지 대신 네이버 에디터 기본 스티커를 사용합니다.")
+        sticker_desc.setStyleSheet("color: #888; font-size: 12px;")
         sticker_desc.setWordWrap(True)
         sticker_layout.addWidget(sticker_desc)
         
@@ -336,15 +336,9 @@ class WritingSettingsTab(QWidget):
         layout.addWidget(group_naver_style)
         
         # ========== 저장 버튼 ==========
-        self.btn_save = QPushButton("💾 글쓰기 설정 저장")
+        self.btn_save = QPushButton("글쓰기 설정 저장")
+        self.btn_save.setObjectName("primaryButton")
         self.btn_save.clicked.connect(self.save_settings)
-        self.btn_save.setStyleSheet("""
-            background-color: #03C75A; 
-            color: white; 
-            padding: 12px; 
-            font-weight: bold;
-            font-size: 14px;
-        """)
         layout.addWidget(self.btn_save)
         
         layout.addStretch()

@@ -13,7 +13,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFo
 from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QPixmap, QImage
 
-BACKEND_URL = "https://generate-blog-post-yahp6ia25q-du.a.run.app"
+from config import Config
+
+BACKEND_URL = Config.BACKEND_URL
 
 
 class AnalysisWorker(QThread):
@@ -147,15 +149,15 @@ class InfoTab(QWidget):
         left_card = QFrame()
         left_card.setStyleSheet("""
             QFrame { 
-                border: 2px solid #03C75A; 
+                border: 2px solid #2D6A4F; 
                 border-radius: 8px; 
-                background-color: #f8fff8; 
+                background-color: #F0F7F4; 
                 padding: 10px;
             }
         """)
         left_layout = QVBoxLayout(left_card)
         
-        self.radio_use_category = QRadioButton("📂 카테고리에서 주제 생성")
+        self.radio_use_category = QRadioButton("카테고리에서 주제 생성")
         self.radio_use_category.setChecked(True)
         self.radio_use_category.toggled.connect(self.toggle_topic_mode)
         self.radio_use_category.setStyleSheet("font-weight: bold; font-size: 13px;")
@@ -184,7 +186,7 @@ class InfoTab(QWidget):
         """)
         right_layout = QVBoxLayout(right_card)
         
-        self.radio_use_keyword = QRadioButton("✏️ 키워드 기반 주제 생성")
+        self.radio_use_keyword = QRadioButton("키워드 기반 주제 생성")
         self.radio_use_keyword.toggled.connect(self.toggle_topic_mode)
         self.radio_use_keyword.setStyleSheet("font-weight: bold; font-size: 13px;")
         self.topic_mode_group.addButton(self.radio_use_keyword, 1)
@@ -205,16 +207,9 @@ class InfoTab(QWidget):
         topic_layout.addLayout(cards_row)
         
         # ===== 주제 생성 버튼 (전체 너비) =====
-        self.btn_generate_topic = QPushButton("✨ 주제 생성하기")
+        self.btn_generate_topic = QPushButton("주제 생성하기")
+        self.btn_generate_topic.setObjectName("primaryButton")
         self.btn_generate_topic.clicked.connect(self.generate_topics)
-        self.btn_generate_topic.setStyleSheet("""
-            background-color: #03C75A; 
-            color: white; 
-            padding: 12px; 
-            font-weight: bold;
-            font-size: 14px;
-            margin-top: 10px;
-        """)
         topic_layout.addWidget(self.btn_generate_topic)
         
         # ===== 생성된 주제 선택 영역 =====
@@ -233,7 +228,7 @@ class InfoTab(QWidget):
         
         # 초기 안내 메시지
         self.topic_placeholder = QLabel("주제 생성 버튼을 눌러 AI 추천 주제를 받아보세요.")
-        self.topic_placeholder.setStyleSheet("color: #999; padding: 20px;")
+        self.topic_placeholder.setStyleSheet("color: #888; padding: 20px;")
         self.topic_placeholder.setAlignment(Qt.AlignCenter)
         self.topic_layout_inner.addWidget(self.topic_placeholder)
         
@@ -261,12 +256,12 @@ class InfoTab(QWidget):
         group_adv = QGroupBox("2. 세부 설정")
         adv_layout = QVBoxLayout()
         
-        self.btn_analyze = QPushButton("🔍 주제 분석하기 (타겟/질문 자동 추출)")
+        self.btn_analyze = QPushButton("주제 분석하기 (타겟/질문 자동 추출)")
+        self.btn_analyze.setObjectName("infoButton")
         self.btn_analyze.clicked.connect(self.run_analysis)
-        self.btn_analyze.setStyleSheet("background-color: #4A90E2; color: white; padding: 10px; font-weight: bold;")
         adv_layout.addWidget(self.btn_analyze)
         
-        adv_layout.addWidget(QLabel("🎯 타깃 독자 (1개만 선택):"))
+        adv_layout.addWidget(QLabel("타깃 독자 (1개만 선택):"))
         self.target_group = QButtonGroup()
         self.target_widget = QWidget()
         self.target_layout = QVBoxLayout(self.target_widget)
@@ -280,17 +275,17 @@ class InfoTab(QWidget):
         target_scroll.setWidget(self.target_widget)
         adv_layout.addWidget(target_scroll)
         
-        adv_layout.addWidget(QLabel("❓ 예상 질문 (선택):"))
+        adv_layout.addWidget(QLabel("예상 질문 (선택):"))
         self.list_questions = QListWidget()
         self.list_questions.setMinimumHeight(120)
         adv_layout.addWidget(self.list_questions)
         
-        adv_layout.addWidget(QLabel("📌 핵심 정보 요약:"))
+        adv_layout.addWidget(QLabel("핵심 정보 요약:"))
         self.txt_summary = QTextEdit()
         self.txt_summary.setMinimumHeight(80)
         adv_layout.addWidget(self.txt_summary)
         
-        adv_layout.addWidget(QLabel("💡 나만의 인사이트 (직접 입력):"))
+        adv_layout.addWidget(QLabel("나만의 인사이트 (직접 입력):"))
         self.txt_insight = QTextEdit()
         self.txt_insight.setMinimumHeight(80)
         adv_layout.addWidget(self.txt_insight)
@@ -299,12 +294,12 @@ class InfoTab(QWidget):
         adv_layout.addWidget(QLabel(""))  # 여백
         
         thumb_header = QHBoxLayout()
-        thumb_header.addWidget(QLabel("🖼️ 대표 썸네일 이미지:"))
+        thumb_header.addWidget(QLabel("대표 썸네일 이미지:"))
         thumb_header.addStretch()
         adv_layout.addLayout(thumb_header)
         
         thumb_desc = QLabel("세부 설정을 펼치면 주제에 맞는 썸네일이 자동 생성됩니다.")
-        thumb_desc.setStyleSheet("color: #666; font-size: 11px;")
+        thumb_desc.setStyleSheet("color: #888; font-size: 12px;")
         adv_layout.addWidget(thumb_desc)
         
         # 썸네일 미리보기 + 재생성 버튼
@@ -320,9 +315,9 @@ class InfoTab(QWidget):
         # 오른쪽: 재생성 버튼 + 남은 횟수
         thumb_btn_layout = QVBoxLayout()
         
-        self.btn_regenerate_thumbnail = QPushButton("🔄 다른 이미지로")
+        self.btn_regenerate_thumbnail = QPushButton("다른 이미지로")
+        self.btn_regenerate_thumbnail.setObjectName("accentButton")
         self.btn_regenerate_thumbnail.clicked.connect(self.regenerate_thumbnail)
-        self.btn_regenerate_thumbnail.setStyleSheet("background-color: #9B59B6; color: white; padding: 8px;")
         self.btn_regenerate_thumbnail.setEnabled(False)
         thumb_btn_layout.addWidget(self.btn_regenerate_thumbnail)
         
@@ -337,7 +332,7 @@ class InfoTab(QWidget):
         adv_layout.addLayout(thumb_row)
         
         # 썸네일 사용 체크
-        self.chk_use_thumbnail = QCheckBox("✅ 이 썸네일 사용하여 발행")
+        self.chk_use_thumbnail = QCheckBox("이 썸네일 사용하여 발행")
         self.chk_use_thumbnail.setEnabled(False)
         adv_layout.addWidget(self.chk_use_thumbnail)
         
@@ -348,19 +343,13 @@ class InfoTab(QWidget):
         self.group_adv = group_adv
 
         # ========== 3. 원고 생성 버튼 ==========
-        self.btn_generate = QPushButton("📝 원고 생성")
-        self.btn_generate.setStyleSheet("""
-            background-color: #03C75A; 
-            color: white; 
-            font-weight: bold; 
-            padding: 15px;
-            font-size: 16px;
-        """)
+        self.btn_generate = QPushButton("원고 생성")
+        self.btn_generate.setObjectName("primaryButton")
         self.btn_generate.clicked.connect(self.request_generate)
         layout.addWidget(self.btn_generate)
 
         # ========== 4. 생성된 글 미리보기 ==========
-        layout.addWidget(QLabel("📝 생성된 글 미리보기"))
+        layout.addWidget(QLabel("생성된 글 미리보기"))
         
         self.view_text = QTextEdit()
         self.view_text.setPlaceholderText("생성된 TEXT 형식 결과가 여기에 표시됩니다.")
@@ -368,14 +357,8 @@ class InfoTab(QWidget):
         layout.addWidget(self.view_text)
 
         # ========== 5. 최종 발행 버튼 ==========
-        self.btn_publish = QPushButton("📤 현재 내용으로 발행하기")
-        self.btn_publish.setStyleSheet("""
-            background-color: #4A90E2; 
-            color: white; 
-            font-weight: bold; 
-            padding: 15px; 
-            font-size: 16px;
-        """)
+        self.btn_publish = QPushButton("현재 내용으로 발행하기")
+        self.btn_publish.setObjectName("secondaryButton")
         self.btn_publish.clicked.connect(self.request_publish)
         self.btn_publish.setEnabled(False)
         layout.addWidget(self.btn_publish)
@@ -392,7 +375,7 @@ class InfoTab(QWidget):
         """썸네일 자동 생성 (세부설정 펼칠 때)"""
         if not self.auth_token:
             self.thumbnail_preview.setText("로그인 필요")
-            self.log_signal.emit("⚠️ 썸네일 생성은 로그인이 필요합니다.")
+            self.log_signal.emit("썸네일 생성은 로그인이 필요합니다.")
             return
         
         topic = self.get_selected_topic()
@@ -400,9 +383,9 @@ class InfoTab(QWidget):
             self.thumbnail_preview.setText("주제를 선택하세요")
             return
         
-        self.thumbnail_preview.setText("⏳ 생성 중...")
+        self.thumbnail_preview.setText("생성 중...")
         self.btn_regenerate_thumbnail.setEnabled(False)
-        self.log_signal.emit(f"🖼️ '{topic}' 주제로 썸네일 이미지 생성 중...")
+        self.log_signal.emit(f"'{topic}' 주제로 썸네일 이미지 생성 중...")
         
         self.thumbnail_worker = ImageGenerateWorker(topic, self.auth_token)
         self.thumbnail_worker.finished.connect(self.on_thumbnail_finished)
@@ -427,10 +410,10 @@ class InfoTab(QWidget):
         self.lbl_regenerate_count.setText(f"재생성 가능: {remaining}회")
         
         if remaining <= 0:
-            self.lbl_regenerate_count.setStyleSheet("color: #E74C3C; font-size: 11px;")
+            self.lbl_regenerate_count.setStyleSheet("color: #C0392B; font-size: 12px;")
             self.btn_regenerate_thumbnail.setEnabled(False)
         else:
-            self.lbl_regenerate_count.setStyleSheet("color: #888; font-size: 11px;")
+            self.lbl_regenerate_count.setStyleSheet("color: #888; font-size: 12px;")
 
     def toggle_topic_mode(self):
         """주제 입력 모드 토글 - 선택에 따라 카드 스타일 및 입력 필드 활성화/비활성화"""
@@ -438,9 +421,9 @@ class InfoTab(QWidget):
             # 카테고리 카드 활성화
             self.left_card.setStyleSheet("""
                 QFrame { 
-                    border: 2px solid #03C75A; 
+                    border: 2px solid #2D6A4F; 
                     border-radius: 8px; 
-                    background-color: #f8fff8; 
+                    background-color: #F0F7F4; 
                     padding: 10px;
                 }
             """)
@@ -468,9 +451,9 @@ class InfoTab(QWidget):
             """)
             self.right_card.setStyleSheet("""
                 QFrame { 
-                    border: 2px solid #4A90E2; 
+                    border: 2px solid #2D6A4F; 
                     border-radius: 8px; 
-                    background-color: #f8f8ff; 
+                    background-color: #F0F7F4; 
                     padding: 10px;
                 }
             """)
@@ -502,11 +485,10 @@ class InfoTab(QWidget):
             QMessageBox.warning(self, "경고", "키워드를 입력해주세요.")
             return
         
-        self.log_signal.emit(f"🔍 '{keyword}' 키워드로 관련 주제를 분석 중입니다...")
+        self.log_signal.emit(f"'{keyword}' 키워드로 관련 주제를 분석 중입니다...")
         
         self.btn_generate_topic.setEnabled(False)
-        self.btn_generate_topic.setText("⏳ 주제 분석 중...")
-        self.btn_generate_topic.setStyleSheet("background-color: #888; color: white; padding: 12px; font-weight: bold;")
+        self.btn_generate_topic.setText("주제 분석 중...")
         
         # 기존 주제 제거
         self._clear_topic_list()
@@ -521,21 +503,20 @@ class InfoTab(QWidget):
         """키워드 기반 추천 완료"""
         self._reset_generate_button()
         self._populate_topics(topics)
-        self.log_signal.emit(f"✅ {len(topics)}개의 관련 주제가 추천되었습니다.")
+        self.log_signal.emit(f"{len(topics)}개의 관련 주제가 추천되었습니다.")
     
     def on_keyword_recommend_error(self, error_msg: str):
         """키워드 기반 추천 에러"""
         self._reset_generate_button()
-        self.log_signal.emit(f"❌ {error_msg}")
-
+        self.log_signal.emit(f"{error_msg}")
+ 
     def get_recommendations(self):
         """카테고리 기반 AI 추천 주제 받기"""
         category = self.combo_cat.currentText()
-        self.log_signal.emit(f"🤖 '{category}' 관련 최신 트렌드를 분석 중입니다...")
+        self.log_signal.emit(f"'{category}' 관련 최신 트렌드를 분석 중입니다...")
         
         self.btn_generate_topic.setEnabled(False)
-        self.btn_generate_topic.setText("⏳ 트렌드 분석 중...")
-        self.btn_generate_topic.setStyleSheet("background-color: #888; color: white; padding: 12px; font-weight: bold;")
+        self.btn_generate_topic.setText("트렌드 분석 중...")
         
         # 기존 주제 제거
         self._clear_topic_list()
@@ -555,14 +536,7 @@ class InfoTab(QWidget):
     def _reset_generate_button(self):
         """주제 생성 버튼 초기화"""
         self.btn_generate_topic.setEnabled(True)
-        self.btn_generate_topic.setText("✨ 주제 생성하기")
-        self.btn_generate_topic.setStyleSheet("""
-            background-color: #03C75A; 
-            color: white; 
-            padding: 12px; 
-            font-weight: bold;
-            font-size: 14px;
-        """)
+        self.btn_generate_topic.setText("주제 생성하기")
     
     def _populate_topics(self, topics: list):
         """주제 목록 채우기"""
@@ -577,7 +551,7 @@ class InfoTab(QWidget):
         """카테고리 기반 추천 완료"""
         self._reset_generate_button()
         self._populate_topics(topics)
-        self.log_signal.emit(f"✅ {len(topics)}개의 트렌드 주제가 추천되었습니다.")
+        self.log_signal.emit(f"{len(topics)}개의 트렌드 주제가 추천되었습니다.")
 
     def on_topic_changed(self, checked: bool):
         """주제 변경 시 호출"""
@@ -599,7 +573,7 @@ class InfoTab(QWidget):
     def on_recommend_error(self, error_msg: str):
         """추천 에러"""
         self._reset_generate_button()
-        self.log_signal.emit(f"❌ {error_msg}")
+        self.log_signal.emit(f"{error_msg}")
 
     def run_analysis(self):
         """주제 분석 실행"""
@@ -608,9 +582,9 @@ class InfoTab(QWidget):
             QMessageBox.warning(self, "경고", "먼저 주제를 선택하거나 입력해주세요.")
             return
             
-        self.log_signal.emit(f"🔍 '{topic}' 주제를 심층 분석 중입니다...")
+        self.log_signal.emit(f"'{topic}' 주제를 심층 분석 중입니다...")
         self.btn_analyze.setEnabled(False)
-        self.btn_analyze.setText("⏳ 분석 중...")
+        self.btn_analyze.setText("분석 중...")
         
         self.analysis_worker = AnalysisWorker(topic)
         self.analysis_worker.finished.connect(self.on_analysis_finished)
@@ -620,7 +594,7 @@ class InfoTab(QWidget):
     def on_analysis_finished(self, data):
         """분석 완료"""
         self.btn_analyze.setEnabled(True)
-        self.btn_analyze.setText("🔍 주제 분석하기 (타겟/질문 추출)")
+        self.btn_analyze.setText("주제 분석하기 (타겟/질문 추출)")
         
         for i in reversed(range(self.target_layout.count())):
             widget = self.target_layout.itemAt(i).widget()
@@ -651,13 +625,13 @@ class InfoTab(QWidget):
         summary_text = "\n".join([f"• {p}" for p in key_points])
         self.txt_summary.setText(summary_text)
         
-        self.log_signal.emit("✅ 분석 완료! 타깃과 질문을 선택해주세요.")
+        self.log_signal.emit("분석 완료! 타깃과 질문을 선택해주세요.")
 
     def on_analysis_error(self, error_msg: str):
         """분석 에러"""
         self.btn_analyze.setEnabled(True)
-        self.btn_analyze.setText("🔍 주제 분석하기 (타겟/질문 추출)")
-        self.log_signal.emit(f"❌ {error_msg}")
+        self.btn_analyze.setText("주제 분석하기 (타겟/질문 추출)")
+        self.log_signal.emit(f"{error_msg}")
 
     def request_generate(self):
         """원고 생성 요청"""
@@ -668,7 +642,7 @@ class InfoTab(QWidget):
 
         # 버튼 상태 변경
         self.btn_generate.setEnabled(False)
-        self.btn_generate.setText("⏳ 생성 중...")
+        self.btn_generate.setText("생성 중...")
         
         # 기본 톤/분량 가져오기 (글쓰기 환경설정에서)
         tone = "친근한 이웃 (해요체)"
@@ -761,7 +735,7 @@ class InfoTab(QWidget):
             except:
                 self.thumbnail_preview.setText("로드 실패")
             
-            self.log_signal.emit("✅ 썸네일 이미지 생성 완료!")
+            self.log_signal.emit("썸네일 이미지 생성 완료!")
 
     def on_thumbnail_error(self, error_msg: str):
         """썸네일 생성 에러"""
@@ -801,12 +775,12 @@ class InfoTab(QWidget):
         
         # 버튼 상태 복원
         self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("✅ 생성 완료!")
+        self.btn_generate.setText("생성 완료!")
         
         # 발행 버튼 활성화
         self.btn_publish.setEnabled(True)
         
-        self.log_signal.emit("✨ 글 생성 완료! 확인 후 발행할 수 있습니다.")
+        self.log_signal.emit("글 생성 완료! 확인 후 발행할 수 있습니다.")
 
     def _clean_to_plain_text(self, content: str) -> str:
         """
@@ -854,7 +828,7 @@ class InfoTab(QWidget):
     def reset_generate_button(self):
         """생성 버튼 초기화 (에러 시 호출)"""
         self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("📝 원고 생성")
+        self.btn_generate.setText("원고 생성")
     
     def cleanup_workers(self):
         """모든 워커 스레드 정리 (앱 종료 시 호출)"""

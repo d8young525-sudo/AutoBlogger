@@ -4,7 +4,6 @@ Firebase 로그인 다이얼로그
 """
 import json
 import requests
-import os
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLineEdit, QPushButton, QLabel, QMessageBox,
@@ -12,15 +11,15 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, QSettings
 
+from config import Config
+from ui.styles import get_login_dialog_stylesheet
+
 # Firebase Auth REST API
 FIREBASE_API_KEY = ""  # Firebase 웹 API 키 (config에서 로드)
 FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts"
 
 # 관리자 연락처 (오픈카톡)
 ADMIN_CONTACT = "https://open.kakao.com/o/sgbYdyai"
-
-# 백엔드 API URL
-BACKEND_URL = os.environ.get("BACKEND_URL", "https://generate-blog-post-yahp6ia25q-du.a.run.app")
 
 
 class LoginDialog(QDialog):
@@ -35,9 +34,10 @@ class LoginDialog(QDialog):
         self.current_user = None
         self.id_token = None
         
-        self.setWindowTitle("🔐 Auto Blogger Pro 로그인")
+        self.setWindowTitle("Auto Blogger Pro 로그인")
         self.setMinimumWidth(420)
         self.setModal(True)
+        self.setStyleSheet(get_login_dialog_stylesheet())
         self.init_ui()
         
         # 저장된 로그인 정보 로드
@@ -47,8 +47,8 @@ class LoginDialog(QDialog):
         layout = QVBoxLayout()
         
         # 앱 로고/타이틀
-        title_label = QLabel("🚗 Auto Blogger Pro")
-        title_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #03C75A; margin: 10px 0;")
+        title_label = QLabel("Auto Blogger Pro")
+        title_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2D6A4F; margin: 10px 0;")
         title_label.setAlignment(Qt.AlignCenter if hasattr(Qt, 'AlignCenter') else 0x0004)
         layout.addWidget(title_label)
         
@@ -71,19 +71,19 @@ class LoginDialog(QDialog):
         login_form.addRow("비밀번호:", self.login_password)
         login_layout.addLayout(login_form)
         
-        self.btn_login = QPushButton("🔓 로그인")
-        self.btn_login.setStyleSheet("background-color: #03C75A; color: white; font-weight: bold; padding: 12px;")
+        self.btn_login = QPushButton("로그인")
+        self.btn_login.setObjectName("primaryButton")
         self.btn_login.clicked.connect(self.do_login)
         login_layout.addWidget(self.btn_login)
         
         # 마지막 로그인 정보
         self.login_status = QLabel("")
-        self.login_status.setStyleSheet("color: #666; font-size: 11px;")
+        self.login_status.setStyleSheet("color: #888; font-size: 12px;")
         login_layout.addWidget(self.login_status)
         
         # 비밀번호 찾기 링크
         self.btn_forgot = QPushButton("비밀번호를 잊으셨나요?")
-        self.btn_forgot.setStyleSheet("border: none; color: #4A90E2; text-decoration: underline; padding: 5px;")
+        self.btn_forgot.setObjectName("linkButton")
         self.btn_forgot.setCursor(Qt.PointingHandCursor if hasattr(Qt, 'PointingHandCursor') else 13)
         self.btn_forgot.clicked.connect(lambda: self.tabs.setCurrentIndex(2))
         login_layout.addWidget(self.btn_forgot)
@@ -110,17 +110,17 @@ class LoginDialog(QDialog):
         register_form.addRow("비밀번호 확인:", self.register_password_confirm)
         register_layout.addLayout(register_form)
         
-        self.btn_register = QPushButton("📝 회원가입")
-        self.btn_register.setStyleSheet("background-color: #4A90E2; color: white; font-weight: bold; padding: 12px;")
+        self.btn_register = QPushButton("회원가입")
+        self.btn_register.setObjectName("infoButton")
         self.btn_register.clicked.connect(self.do_register)
         register_layout.addWidget(self.btn_register)
         
-        register_info = QLabel("⚠️ 회원가입 후 관리자 승인이 필요합니다.")
+        register_info = QLabel("회원가입 후 관리자 승인이 필요합니다.")
         register_info.setStyleSheet("color: #E67E22; font-size: 12px;")
         register_layout.addWidget(register_info)
         
         # 관리자 연락처 안내
-        contact_info = QLabel(f"📞 승인 문의: <a href='{ADMIN_CONTACT}'>오픈카톡</a>")
+        contact_info = QLabel(f"승인 문의: <a href='{ADMIN_CONTACT}'>오픈카톡</a>")
         contact_info.setStyleSheet("color: #3498DB; font-size: 12px;")
         contact_info.setOpenExternalLinks(True)
         register_layout.addWidget(contact_info)
@@ -133,7 +133,7 @@ class LoginDialog(QDialog):
         reset_layout = QVBoxLayout()
         
         reset_info = QLabel("가입한 이메일 주소를 입력하시면\n비밀번호 재설정 링크를 보내드립니다.")
-        reset_info.setStyleSheet("color: #666; font-size: 12px; margin: 10px 0;")
+        reset_info.setStyleSheet("color: #888; font-size: 12px; margin: 10px 0;")
         reset_layout.addWidget(reset_info)
         
         reset_form = QFormLayout()
@@ -142,14 +142,14 @@ class LoginDialog(QDialog):
         reset_form.addRow("이메일:", self.reset_email)
         reset_layout.addLayout(reset_form)
         
-        self.btn_reset = QPushButton("📧 비밀번호 재설정 링크 보내기")
-        self.btn_reset.setStyleSheet("background-color: #9B59B6; color: white; font-weight: bold; padding: 12px;")
+        self.btn_reset = QPushButton("비밀번호 재설정 링크 보내기")
+        self.btn_reset.setObjectName("secondaryButton")
         self.btn_reset.clicked.connect(self.do_reset_password)
         reset_layout.addWidget(self.btn_reset)
         
         # 로그인으로 돌아가기
         self.btn_back_login = QPushButton("← 로그인으로 돌아가기")
-        self.btn_back_login.setStyleSheet("border: none; color: #4A90E2; padding: 5px;")
+        self.btn_back_login.setObjectName("linkButton")
         self.btn_back_login.clicked.connect(lambda: self.tabs.setCurrentIndex(0))
         reset_layout.addWidget(self.btn_back_login)
         
@@ -161,8 +161,8 @@ class LoginDialog(QDialog):
         
         # 하단 취소 버튼
         btn_layout = QHBoxLayout()
-        self.btn_cancel = QPushButton("❌ 종료")
-        self.btn_cancel.setStyleSheet("background-color: #95A5A6; color: white; padding: 8px;")
+        self.btn_cancel = QPushButton("종료")
+        self.btn_cancel.setObjectName("dangerButton")
         self.btn_cancel.clicked.connect(self.reject)
         btn_layout.addStretch()
         btn_layout.addWidget(self.btn_cancel)
@@ -194,7 +194,7 @@ class LoginDialog(QDialog):
             return
         
         self.btn_login.setEnabled(False)
-        self.btn_login.setText("⏳ 로그인 중...")
+        self.btn_login.setText("로그인 중...")
         
         try:
             # Firebase Auth REST API 호출
@@ -244,7 +244,7 @@ class LoginDialog(QDialog):
             QMessageBox.warning(self, "오류", f"로그인 중 오류 발생: {str(e)}")
         finally:
             self.btn_login.setEnabled(True)
-            self.btn_login.setText("🔓 로그인")
+            self.btn_login.setText("로그인")
     
     def do_register(self):
         """회원가입 실행"""
@@ -265,7 +265,7 @@ class LoginDialog(QDialog):
             return
         
         self.btn_register.setEnabled(False)
-        self.btn_register.setText("⏳ 가입 중...")
+        self.btn_register.setText("가입 중...")
         
         try:
             # Firebase Auth REST API 호출
@@ -289,8 +289,8 @@ class LoginDialog(QDialog):
                     "회원가입 완료", 
                     f"회원가입이 완료되었습니다!\n\n"
                     f"이메일: {email}\n\n"
-                    f"⚠️ 서비스 이용을 위해 관리자 승인이 필요합니다.\n"
-                    f"📞 오픈카톡으로 문의해주세요:\n"
+                    f"서비스 이용을 위해 관리자 승인이 필요합니다.\n"
+                    f"오픈카톡으로 문의해주세요:\n"
                     f"{ADMIN_CONTACT}"
                 )
                 
@@ -317,7 +317,7 @@ class LoginDialog(QDialog):
             QMessageBox.warning(self, "오류", f"회원가입 중 오류 발생: {str(e)}")
         finally:
             self.btn_register.setEnabled(True)
-            self.btn_register.setText("📝 회원가입")
+            self.btn_register.setText("회원가입")
     
     def do_reset_password(self):
         """비밀번호 재설정 이메일 발송"""
@@ -328,7 +328,7 @@ class LoginDialog(QDialog):
             return
         
         self.btn_reset.setEnabled(False)
-        self.btn_reset.setText("⏳ 발송 중...")
+        self.btn_reset.setText("발송 중...")
         
         try:
             # Firebase Auth REST API - 비밀번호 재설정
@@ -345,7 +345,7 @@ class LoginDialog(QDialog):
                     self,
                     "이메일 발송 완료",
                     f"비밀번호 재설정 링크가 발송되었습니다.\n\n"
-                    f"📧 {email}\n\n"
+                    f"{email}\n\n"
                     f"이메일을 확인하여 비밀번호를 재설정해주세요.\n"
                     f"(스팸함도 확인해주세요)"
                 )
@@ -372,7 +372,7 @@ class LoginDialog(QDialog):
             QMessageBox.warning(self, "오류", f"발송 중 오류 발생: {str(e)}")
         finally:
             self.btn_reset.setEnabled(True)
-            self.btn_reset.setText("📧 비밀번호 재설정 링크 보내기")
+            self.btn_reset.setText("비밀번호 재설정 링크 보내기")
     
     def _create_firestore_user(self, id_token: str, email: str):
         """회원가입 후 Firestore에 사용자 문서 즉시 생성"""
@@ -386,7 +386,7 @@ class LoginDialog(QDialog):
             }
             
             response = requests.post(
-                BACKEND_URL,
+                Config.BACKEND_URL,
                 json=payload,
                 headers=headers,
                 timeout=30

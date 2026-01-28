@@ -31,7 +31,7 @@ class SettingsTab(QWidget):
         layout = QVBoxLayout(content_widget)
         
         # ========== 1. 네이버 계정 설정 ==========
-        group_account = QGroupBox("🔐 네이버 계정 (블로그 발행용)")
+        group_account = QGroupBox("네이버 계정 (블로그 발행용)")
         account_form = QFormLayout()
         
         self.input_id = QLineEdit()
@@ -43,19 +43,19 @@ class SettingsTab(QWidget):
         account_form.addRow("네이버 ID:", self.input_id)
         account_form.addRow("네이버 PW:", self.input_pw)
         
-        account_notice = QLabel("⚠️ 네이버 계정은 블로그 자동 발행에만 사용됩니다.")
-        account_notice.setStyleSheet("color: #888; font-size: 11px;")
+        account_notice = QLabel("네이버 계정은 블로그 자동 발행에만 사용됩니다.")
+        account_notice.setStyleSheet("color: #888; font-size: 12px;")
         account_form.addRow("", account_notice)
         
         group_account.setLayout(account_form)
         layout.addWidget(group_account)
         
         # ========== 2. 고정 인사말 ==========
-        group_intro = QGroupBox("👋 고정 인사말 (글 시작 부분)")
+        group_intro = QGroupBox("고정 인사말 (글 시작 부분)")
         intro_layout = QVBoxLayout()
         
         intro_desc = QLabel("모든 글의 첫 부분에 자동으로 삽입됩니다.")
-        intro_desc.setStyleSheet("color: #666; font-size: 11px;")
+        intro_desc.setStyleSheet("color: #888; font-size: 12px;")
         intro_layout.addWidget(intro_desc)
         
         self.input_intro = QTextEdit()
@@ -67,11 +67,11 @@ class SettingsTab(QWidget):
         layout.addWidget(group_intro)
         
         # ========== 3. 고정 맺음말 + 명함 이미지 ==========
-        group_outro = QGroupBox("🤝 고정 맺음말 (글 마무리 부분)")
+        group_outro = QGroupBox("고정 맺음말 (글 마무리 부분)")
         outro_layout = QVBoxLayout()
         
         outro_desc = QLabel("모든 글의 마지막 부분에 자동으로 삽입됩니다.")
-        outro_desc.setStyleSheet("color: #666; font-size: 11px;")
+        outro_desc.setStyleSheet("color: #888; font-size: 12px;")
         outro_layout.addWidget(outro_desc)
         
         self.input_outro = QTextEdit()
@@ -80,28 +80,27 @@ class SettingsTab(QWidget):
         outro_layout.addWidget(self.input_outro)
         
         # 명함 이미지 섹션
-        outro_layout.addWidget(QLabel("📇 명함/연락처 이미지 (선택):"))
+        outro_layout.addWidget(QLabel("명함/연락처 이미지 (선택):"))
         
         image_layout = QHBoxLayout()
         
         # 이미지 미리보기
         self.lbl_image_preview = QLabel()
         self.lbl_image_preview.setFixedSize(150, 90)
-        self.lbl_image_preview.setStyleSheet("border: 1px solid #ddd; background-color: #f9f9f9;")
+        self.lbl_image_preview.setStyleSheet("border: 1px solid #E0E0E0; background-color: #FAFAFA;")
         self.lbl_image_preview.setAlignment(Qt.AlignCenter)
         image_layout.addWidget(self.lbl_image_preview)
         
         # 이미지 버튼들
         btn_image_layout = QVBoxLayout()
         
-        self.btn_select_image = QPushButton("📁 이미지 선택")
+        self.btn_select_image = QPushButton("이미지 선택")
         self.btn_select_image.clicked.connect(self.select_outro_image)
-        self.btn_select_image.setStyleSheet("padding: 8px;")
         btn_image_layout.addWidget(self.btn_select_image)
         
-        self.btn_clear_image = QPushButton("🗑️ 삭제")
+        self.btn_clear_image = QPushButton("삭제")
+        self.btn_clear_image.setObjectName("dangerButton")
         self.btn_clear_image.clicked.connect(self.clear_outro_image)
-        self.btn_clear_image.setStyleSheet("padding: 8px;")
         btn_image_layout.addWidget(self.btn_clear_image)
         
         btn_image_layout.addStretch()
@@ -112,31 +111,25 @@ class SettingsTab(QWidget):
         
         # 이미지 경로 표시
         self.lbl_image_path = QLabel("")
-        self.lbl_image_path.setStyleSheet("color: #666; font-size: 11px;")
+        self.lbl_image_path.setStyleSheet("color: #888; font-size: 12px;")
         outro_layout.addWidget(self.lbl_image_path)
         
-        image_notice = QLabel("💡 지원 형식: JPG, JPEG, PNG, BMP, GIF")
-        image_notice.setStyleSheet("color: #888; font-size: 11px;")
+        image_notice = QLabel("지원 형식: JPG, JPEG, PNG, BMP, GIF")
+        image_notice.setStyleSheet("color: #888; font-size: 12px;")
         outro_layout.addWidget(image_notice)
         
         group_outro.setLayout(outro_layout)
         layout.addWidget(group_outro)
         
         # ========== 저장 버튼 ==========
-        self.btn_save = QPushButton("💾 설정 저장")
+        self.btn_save = QPushButton("설정 저장")
+        self.btn_save.setObjectName("primaryButton")
         self.btn_save.clicked.connect(self.save_settings)
-        self.btn_save.setStyleSheet("""
-            background-color: #03C75A; 
-            color: white; 
-            padding: 12px; 
-            font-weight: bold;
-            font-size: 14px;
-        """)
         layout.addWidget(self.btn_save)
         
         # 안내 문구
-        notice = QLabel("💡 글쓰기 관련 설정(카테고리, 스타일, 썸네일 등)은 [글쓰기 환경설정] 탭에서 관리됩니다.")
-        notice.setStyleSheet("color: #888; font-size: 11px; padding: 10px; background-color: #f8f8f8; border-radius: 4px;")
+        notice = QLabel("글쓰기 관련 설정(카테고리, 스타일, 썸네일 등)은 [글쓰기 환경설정] 탭에서 관리됩니다.")
+        notice.setStyleSheet("color: #888; font-size: 12px; padding: 10px; background-color: #F0F0F0; border-radius: 4px;")
         notice.setWordWrap(True)
         layout.addWidget(notice)
         
@@ -160,7 +153,7 @@ class SettingsTab(QWidget):
         outro_image = self.settings.value("outro_image", "")
         if outro_image and os.path.exists(outro_image):
             self.load_image_preview(outro_image)
-            self.lbl_image_path.setText(f"📎 {os.path.basename(outro_image)}")
+            self.lbl_image_path.setText(os.path.basename(outro_image))
         else:
             self.lbl_image_preview.setText("이미지 없음")
     
@@ -176,7 +169,7 @@ class SettingsTab(QWidget):
         if file_path:
             if self.load_image_preview(file_path):
                 self.settings.setValue("outro_image", file_path)
-                self.lbl_image_path.setText(f"📎 {os.path.basename(file_path)}")
+                self.lbl_image_path.setText(os.path.basename(file_path))
                 QMessageBox.information(self, "완료", "명함 이미지가 설정되었습니다.")
     
     def load_image_preview(self, file_path: str) -> bool:
