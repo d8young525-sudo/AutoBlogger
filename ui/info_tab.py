@@ -604,10 +604,34 @@ class InfoTab(QWidget):
         self.btn_generate_topic.setText("주제 생성하기")
     
     def _populate_topics(self, topics: list):
-        """주제 목록 채우기"""
+        """주제 목록 채우기 - 선택 가능한 카드 스타일"""
         for t in topics:
             rb = QRadioButton(t)
-            rb.setStyleSheet("font-size: 13px; padding: 5px;")
+            rb.setStyleSheet("""
+                QRadioButton {
+                    background-color: #FFFFFF;
+                    border: 1px solid #FFE0D6;
+                    border-radius: 8px;
+                    padding: 12px 16px;
+                    margin: 3px 0;
+                    font-size: 13px;
+                    color: #2D2D3A;
+                }
+                QRadioButton:hover {
+                    background-color: #FFF8F6;
+                    border-color: #FF6B6B;
+                }
+                QRadioButton:checked {
+                    background-color: #FFF0EC;
+                    border: 2px solid #FF6B6B;
+                    color: #E04E4E;
+                    font-weight: bold;
+                }
+                QRadioButton::indicator {
+                    width: 0px;
+                    height: 0px;
+                }
+            """)
             rb.toggled.connect(self.on_topic_changed)
             self.topic_layout_inner.addWidget(rb)
             self.topic_group.addButton(rb)
@@ -677,8 +701,32 @@ class InfoTab(QWidget):
         key_points = data.get("key_points", [])
         
         for t in targets:
-            rb = QRadioButton(f"  {t}")
-            rb.setStyleSheet("font-size: 13px; padding: 3px 5px;")
+            rb = QRadioButton(t)
+            rb.setStyleSheet("""
+                QRadioButton {
+                    background-color: #FFFFFF;
+                    border: 1px solid #E0E0E0;
+                    border-radius: 6px;
+                    padding: 8px 14px;
+                    margin: 2px 0;
+                    font-size: 12px;
+                    color: #2D2D3A;
+                }
+                QRadioButton:hover {
+                    background-color: #F5F5F5;
+                    border-color: #4299E1;
+                }
+                QRadioButton:checked {
+                    background-color: #EBF8FF;
+                    border: 2px solid #4299E1;
+                    color: #2B6CB0;
+                    font-weight: bold;
+                }
+                QRadioButton::indicator {
+                    width: 0px;
+                    height: 0px;
+                }
+            """)
             self.target_layout.addWidget(rb)
             self.target_group.addButton(rb)
             

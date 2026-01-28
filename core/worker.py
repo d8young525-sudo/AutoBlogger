@@ -10,7 +10,7 @@ from PySide6.QtCore import QThread, Signal
 
 from automation import NaverBlogBot
 from config import Config
-from core.content_converter import text_to_naver_document
+from core.content_converter import text_to_naver_document, ContentConverter
 from core.post_history import add_post
 
 logger = logging.getLogger(__name__)
@@ -255,8 +255,12 @@ class AutomationWorker(QThread):
                 )
             except Exception as e:
                 self.log_signal.emit(f"JSON 문서 생성 실패: {e}, DOM 방식으로 전환...")
-                # Fallback to DOM manipulation
-                success, msg = self.bot.write_content(title, content)
+                # Fallback to DOM manipulation with blocks
+                blocks = self._text_to_blocks(content)
+                if blocks:
+                    success, msg = self.bot.write_content_with_blocks(title, blocks)
+                else:
+                    success, msg = self.bot.write_content(title, content)
                 if not success:
                     self.log_signal.emit(f"작성 실패: {msg}")
                     return
@@ -284,9 +288,14 @@ class AutomationWorker(QThread):
                 self._record_publish(title, content, category)
             else:
                 self.log_signal.emit(f"JSON 발행 실패: {msg}")
-                self.log_signal.emit("DOM 방식으로 재시도...")
-                # Fallback to DOM manipulation
-                success, msg = self.bot.write_content(title, content)
+                self.log_signal.emit("DOM 방식으로 재시도 (서식 적용)...")
+                # Fallback to DOM manipulation with blocks
+                blocks = self._text_to_blocks(content)
+                if blocks:
+                    success, msg = self.bot.write_content_with_blocks(title, blocks)
+                else:
+                    # 블록 변환 실패 시 단순 텍스트
+                    success, msg = self.bot.write_content(title, content)
                 if success and not self._is_cancelled:
                     success, msg = self.bot.publish_post(category=category)
                 if success:
@@ -303,6 +312,55 @@ class AutomationWorker(QThread):
             if self.bot:
                 self.bot.close()
                 self.bot = None
+
+    def _text_to_blocks(self, content: str) -> list:
+        """
+        텍스트를 blocks 배열로 변환 (DOM 방식 서식 적용용)
+        
+        Returns:
+            list of block dicts: [{"type": "heading", "text": "..."}, ...]
+        """
+        try:
+            converter = ContentConverter()
+            parsed = converter.parse_text_content(content)
+            
+            blocks = []
+            for section in parsed.get("sections", []):
+                # 소제목
+                heading = section.get("heading", "")
+                if heading:
+                    blocks.append({"type": "heading", "text": heading, "level": 2})
+                
+                # 섹션 내용
+                for item in section.get("content", []):
+                    item_type = item.get("type", "paragraph")
+                    item_text = item.get("text", "")
+                    
+                    if item_type == "paragraph":
+                        if item_text.strip():
+                            blocks.append({"type": "paragraph", "text": item_text})
+                    elif item_type == "question":
+                        blocks.append({"type": "quotation", "text": f"Q. {item_text}"})
+                    elif item_type == "answer":
+                        blocks.append({"type": "paragraph", "text": f"A. {item_text}"})
+                    elif item_type == "list_item":
+                        # 연속된 리스트 아이템은 하나의 list 블록으로 모음
+                        if blocks and blocks[-1].get("type") == "list":
+                            blocks[-1]["items"].append(item_text)
+                        else:
+                            blocks.append({"type": "list", "style": "bullet", "items": [item_text]})
+                    elif item_type == "divider":
+                        blocks.append({"type": "divider"})
+                    else:
+                        if item_text.strip():
+                            blocks.append({"type": "paragraph", "text": item_text})
+            
+            logger.info(f"Converted text to {len(blocks)} blocks")
+            return blocks
+            
+        except Exception as e:
+            logger.warning(f"Failed to convert text to blocks: {e}")
+            return []
 
     def _record_publish(self, title: str, content: str, category: str):
         """발행 성공 시 이력 기록"""

@@ -248,13 +248,25 @@ def get_app_stylesheet() -> str:
     }}
 
     QComboBox::drop-down {{
-        border: none;
-        width: 24px;
+        subcontrol-origin: padding;
+        subcontrol-position: center right;
+        width: 28px;
+        border-left: 1px solid {BORDER_LIGHT};
+        border-top-right-radius: 6px;
+        border-bottom-right-radius: 6px;
+        background-color: {BG_SIDEBAR};
     }}
 
     QComboBox::down-arrow {{
-        width: 10px;
-        height: 10px;
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 6px solid {PRIMARY};
+    }}
+    
+    QComboBox:hover::down-arrow {{
+        border-top-color: {PRIMARY_DARK};
     }}
 
     QComboBox QAbstractItemView {{
