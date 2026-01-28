@@ -11,6 +11,7 @@ from PySide6.QtCore import QThread, Signal
 from automation import NaverBlogBot
 from config import Config
 from core.content_converter import text_to_naver_document
+from core.post_history import add_post
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +246,7 @@ class AutomationWorker(QThread):
                 success, msg = self.bot.publish_post(category=category)
                 if success:
                     self.log_signal.emit("발행 완료! (DOM 방식)")
+                    self._record_publish(title, content, category)
                 else:
                     self.log_signal.emit(f"발행 실패: {msg}")
                 return
@@ -260,6 +262,7 @@ class AutomationWorker(QThread):
             if success:
                 self.log_signal.emit("발행 완료!")
                 self.progress_signal.emit(100)
+                self._record_publish(title, content, category)
             else:
                 self.log_signal.emit(f"JSON 발행 실패: {msg}")
                 self.log_signal.emit("DOM 방식으로 재시도...")
@@ -269,14 +272,32 @@ class AutomationWorker(QThread):
                     success, msg = self.bot.publish_post(category=category)
                 if success:
                     self.log_signal.emit("발행 완료! (DOM fallback)")
+                    self._record_publish(title, content, category)
                 else:
                     self.log_signal.emit(f"발행 실패: {msg}")
                 
         except Exception as e:
-            self.log_signal.emit(f"💥 치명적 오류: {str(e)}")
+            self.log_signal.emit(f"치명적 오류: {str(e)}")
             logger.error(f"Publishing failed: {e}")
         finally:
             # Cleanup - close browser
             if self.bot:
                 self.bot.close()
                 self.bot = None
+
+    def _record_publish(self, title: str, content: str, category: str):
+        """발행 성공 시 이력 기록"""
+        try:
+            topic = self.data.get("topic", "")
+            mode = self.data.get("mode", "info")
+            tags = self.data.get("tags", "")
+            add_post(
+                title=title,
+                topic=topic,
+                category=category,
+                mode=mode,
+                content_preview=content[:200] if content else "",
+                tags=tags
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record post history: {e}")

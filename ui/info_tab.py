@@ -9,11 +9,13 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFo
                                QComboBox, QLineEdit, QPushButton, QRadioButton, 
                                QButtonGroup, QLabel, QMessageBox, QScrollArea, 
                                QListWidget, QListWidgetItem, QTextEdit, QCheckBox,
-                               QFrame)
-from PySide6.QtCore import Qt, Signal, QThread
+                               QFrame, QDateTimeEdit)
+from PySide6.QtCore import Qt, Signal, QThread, QDateTime, QTimer
 from PySide6.QtGui import QPixmap, QImage
 
 from config import Config
+from core.post_history import is_duplicate_topic, get_stats
+from core.hashtag_generator import HashtagWorker, extract_tags_local
 
 BACKEND_URL = Config.BACKEND_URL
 
@@ -117,6 +119,8 @@ class InfoTab(QWidget):
         self.auth_token = ""
         self.generated_content = ""
         self.generated_title = ""
+        self.hashtag_worker = None
+        self.schedule_timer = None
         
         # 썸네일 재생성 횟수 추적 (주제별) - 서버 측에서 일/월 한도 관리
         self.current_topic_for_thumbnail = ""
@@ -297,8 +301,8 @@ class InfoTab(QWidget):
         thumb_header.addStretch()
         adv_layout.addLayout(thumb_header)
         
-        thumb_desc = QLabel("세부 설정을 펼치면 주제에 맞는 썸네일이 자동 생성됩니다.")
-        thumb_desc.setStyleSheet("color: #888; font-size: 12px;")
+        thumb_desc = QLabel("원고 생성 완료 후 주제에 맞는 썸네일이 자동 생성됩니다.")
+        thumb_desc.setStyleSheet("color: #9A9AB0; font-size: 12px;")
         adv_layout.addWidget(thumb_desc)
         
         # 썸네일 미리보기 + 재생성 버튼
@@ -320,8 +324,8 @@ class InfoTab(QWidget):
         self.btn_regenerate_thumbnail.setEnabled(False)
         thumb_btn_layout.addWidget(self.btn_regenerate_thumbnail)
         
-        self.lbl_regenerate_count = QLabel("재생성 가능: 2회")
-        self.lbl_regenerate_count.setStyleSheet("color: #888; font-size: 11px;")
+        self.lbl_regenerate_count = QLabel("재생성 횟수: 0회")
+        self.lbl_regenerate_count.setStyleSheet("color: #9A9AB0; font-size: 11px;")
         thumb_btn_layout.addWidget(self.lbl_regenerate_count)
         
         thumb_btn_layout.addStretch()
@@ -355,12 +359,72 @@ class InfoTab(QWidget):
         self.view_text.setMinimumHeight(350)
         layout.addWidget(self.view_text)
 
-        # ========== 5. 최종 발행 버튼 ==========
-        self.btn_publish = QPushButton("현재 내용으로 발행하기")
-        self.btn_publish.setObjectName("secondaryButton")
+        # ========== 5. 해시태그 ==========
+        group_tags = QGroupBox("해시태그 (자동 생성)")
+        tags_layout = QVBoxLayout()
+        
+        tags_desc = QLabel("원고 생성 후 자동으로 해시태그가 추천됩니다. 직접 수정할 수 있습니다.")
+        tags_desc.setStyleSheet("color: #9A9AB0; font-size: 12px;")
+        tags_layout.addWidget(tags_desc)
+        
+        self.txt_tags = QLineEdit()
+        self.txt_tags.setPlaceholderText("해시태그가 자동 생성됩니다 (쉼표로 구분)")
+        tags_layout.addWidget(self.txt_tags)
+        
+        tags_btn_row = QHBoxLayout()
+        self.btn_regenerate_tags = QPushButton("태그 재생성")
+        self.btn_regenerate_tags.setObjectName("accentButton")
+        self.btn_regenerate_tags.clicked.connect(self.regenerate_tags)
+        self.btn_regenerate_tags.setEnabled(False)
+        tags_btn_row.addWidget(self.btn_regenerate_tags)
+        tags_btn_row.addStretch()
+        tags_layout.addLayout(tags_btn_row)
+        
+        group_tags.setLayout(tags_layout)
+        layout.addWidget(group_tags)
+
+        # ========== 6. 발행 옵션 ==========
+        group_publish = QGroupBox("발행")
+        publish_layout = QVBoxLayout()
+        
+        # 즉시 발행
+        self.btn_publish = QPushButton("현재 내용으로 즉시 발행")
+        self.btn_publish.setObjectName("primaryButton")
         self.btn_publish.clicked.connect(self.request_publish)
         self.btn_publish.setEnabled(False)
-        layout.addWidget(self.btn_publish)
+        publish_layout.addWidget(self.btn_publish)
+        
+        # 예약 발행
+        schedule_row = QHBoxLayout()
+        
+        self.dt_schedule = QDateTimeEdit()
+        self.dt_schedule.setCalendarPopup(True)
+        self.dt_schedule.setDateTime(QDateTime.currentDateTime().addSecs(3600))  # 1시간 후
+        self.dt_schedule.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.dt_schedule.setMinimumDateTime(QDateTime.currentDateTime())
+        schedule_row.addWidget(QLabel("예약 시간:"))
+        schedule_row.addWidget(self.dt_schedule)
+        
+        self.btn_schedule = QPushButton("예약 발행")
+        self.btn_schedule.setObjectName("secondaryButton")
+        self.btn_schedule.clicked.connect(self.schedule_publish)
+        self.btn_schedule.setEnabled(False)
+        schedule_row.addWidget(self.btn_schedule)
+        
+        self.btn_cancel_schedule = QPushButton("예약 취소")
+        self.btn_cancel_schedule.setObjectName("dangerButton")
+        self.btn_cancel_schedule.clicked.connect(self.cancel_scheduled_publish)
+        self.btn_cancel_schedule.hide()
+        schedule_row.addWidget(self.btn_cancel_schedule)
+        
+        publish_layout.addLayout(schedule_row)
+        
+        self.lbl_schedule_status = QLabel("")
+        self.lbl_schedule_status.setStyleSheet("color: #9A9AB0; font-size: 12px;")
+        publish_layout.addWidget(self.lbl_schedule_status)
+        
+        group_publish.setLayout(publish_layout)
+        layout.addWidget(group_publish)
 
         scroll.setWidget(content_widget)
         main_layout.addWidget(scroll)
@@ -547,15 +611,14 @@ class InfoTab(QWidget):
             new_topic = self.get_selected_topic()
             if new_topic and new_topic != self.current_topic_for_thumbnail:
                 self.thumbnail_image = None
-                self.thumbnail_preview.setText("썸네일 대기중...")
+                self.thumbnail_preview.setText("원고 생성 후 자동 생성됩니다")
                 self.chk_use_thumbnail.setChecked(False)
                 self.chk_use_thumbnail.setEnabled(False)
+                self.btn_regenerate_thumbnail.setEnabled(False)
                 
-                # 새 주제 선택 시 썸네일 자동 생성
                 self.current_topic_for_thumbnail = new_topic
                 self.thumbnail_regenerate_count = 0
                 self.update_regenerate_count_label()
-                self.generate_thumbnail_auto()
 
     def on_recommend_error(self, error_msg: str):
         """추천 에러"""
@@ -627,6 +690,17 @@ class InfoTab(QWidget):
             QMessageBox.warning(self, "경고", "주제를 선택하거나 입력해주세요.")
             return
 
+        # 중복 주제 경고
+        if is_duplicate_topic(topic, days=30):
+            reply = QMessageBox.question(
+                self, "중복 주제",
+                f"최근 30일 내 유사한 주제로 발행한 이력이 있습니다.\n\n"
+                f"주제: {topic}\n\n계속 생성하시겠습니까?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
+
         # 버튼 상태 변경
         self.btn_generate.setEnabled(False)
         self.btn_generate.setText("생성 중...")
@@ -693,20 +767,22 @@ class InfoTab(QWidget):
         if self.chk_use_thumbnail.isChecked() and self.thumbnail_image:
             thumbnail = self.thumbnail_image
         
+        # 해시태그
+        tags = self.txt_tags.text().strip()
+        
         data = {
             "action": "publish_only",
             "title": title,
             "content": content,
             "category": category,
+            "tags": tags,
             "images": {"thumbnail": thumbnail, "illustrations": []}
         }
         self.start_signal.emit(data)
 
     def on_thumbnail_finished(self, images: list):
         """썸네일 생성 완료"""
-        remaining = self.max_regenerate_count - self.thumbnail_regenerate_count
-        if remaining > 0:
-            self.btn_regenerate_thumbnail.setEnabled(True)
+        self.btn_regenerate_thumbnail.setEnabled(True)
         
         if images:
             self.thumbnail_image = images[0]
@@ -726,12 +802,110 @@ class InfoTab(QWidget):
 
     def on_thumbnail_error(self, error_msg: str):
         """썸네일 생성 에러"""
-        remaining = self.max_regenerate_count - self.thumbnail_regenerate_count
-        if remaining > 0:
-            self.btn_regenerate_thumbnail.setEnabled(True)
+        self.btn_regenerate_thumbnail.setEnabled(True)
         
         self.thumbnail_preview.setText("생성 실패")
-        self.log_signal.emit(f"❌ {error_msg}")
+        self.log_signal.emit(f"썸네일 생성 실패: {error_msg}")
+
+    # ========== 해시태그 ==========
+    
+    def _auto_generate_tags(self):
+        """원고 기반 해시태그 자동 생성"""
+        if not self.generated_content:
+            return
+        
+        title = self.generated_title or ""
+        content = self.generated_content
+        
+        # 빠른 로컬 추출 (즉시 표시)
+        tags = extract_tags_local(title, content)
+        if tags:
+            self.txt_tags.setText(", ".join(tags))
+            self.btn_regenerate_tags.setEnabled(True)
+            self.log_signal.emit(f"해시태그 {len(tags)}개 자동 생성 완료")
+    
+    def regenerate_tags(self):
+        """해시태그 재생성 (AI 사용 시도)"""
+        if not self.generated_content:
+            return
+        
+        self.btn_regenerate_tags.setEnabled(False)
+        self.btn_regenerate_tags.setText("생성 중...")
+        
+        self.hashtag_worker = HashtagWorker(
+            self.generated_title or "",
+            self.generated_content,
+            self.auth_token
+        )
+        self.hashtag_worker.finished.connect(self._on_tags_generated)
+        self.hashtag_worker.error.connect(self._on_tags_error)
+        self.hashtag_worker.start()
+    
+    def _on_tags_generated(self, tags: list):
+        """해시태그 생성 완료"""
+        self.btn_regenerate_tags.setEnabled(True)
+        self.btn_regenerate_tags.setText("태그 재생성")
+        if tags:
+            self.txt_tags.setText(", ".join(tags))
+            self.log_signal.emit(f"해시태그 {len(tags)}개 생성 완료")
+    
+    def _on_tags_error(self, error_msg: str):
+        """해시태그 생성 에러"""
+        self.btn_regenerate_tags.setEnabled(True)
+        self.btn_regenerate_tags.setText("태그 재생성")
+        self.log_signal.emit(f"해시태그 생성 실패: {error_msg}")
+
+    # ========== 예약 발행 ==========
+    
+    def schedule_publish(self):
+        """예약 발행 설정"""
+        target_dt = self.dt_schedule.dateTime()
+        now = QDateTime.currentDateTime()
+        
+        if target_dt <= now:
+            QMessageBox.warning(self, "경고", "예약 시간은 현재 시간 이후여야 합니다.")
+            return
+        
+        delay_ms = now.msecsTo(target_dt)
+        self.schedule_timer = QTimer(self)
+        self.schedule_timer.setSingleShot(True)
+        self.schedule_timer.timeout.connect(self._execute_scheduled_publish)
+        self.schedule_timer.start(delay_ms)
+        
+        # UI 업데이트
+        self.lbl_schedule_status.setText(f"예약됨: {target_dt.toString('yyyy-MM-dd HH:mm')}")
+        self.lbl_schedule_status.setStyleSheet("color: #FF6B6B; font-size: 12px; font-weight: bold;")
+        self.btn_schedule.hide()
+        self.btn_cancel_schedule.show()
+        self.btn_publish.setEnabled(False)
+        self.dt_schedule.setEnabled(False)
+        
+        self.log_signal.emit(f"예약 발행 설정됨: {target_dt.toString('yyyy-MM-dd HH:mm')}")
+    
+    def _execute_scheduled_publish(self):
+        """예약 시간 도달 시 발행 실행"""
+        self.schedule_timer = None
+        self.lbl_schedule_status.setText("예약 시간 도달! 발행 중...")
+        self.btn_cancel_schedule.hide()
+        self.btn_schedule.show()
+        self.dt_schedule.setEnabled(True)
+        self.log_signal.emit("예약 시간 도달 - 자동 발행을 시작합니다.")
+        self.request_publish()
+    
+    def cancel_scheduled_publish(self):
+        """예약 취소"""
+        if self.schedule_timer:
+            self.schedule_timer.stop()
+            self.schedule_timer = None
+        
+        self.lbl_schedule_status.setText("예약이 취소되었습니다.")
+        self.lbl_schedule_status.setStyleSheet("color: #9A9AB0; font-size: 12px;")
+        self.btn_cancel_schedule.hide()
+        self.btn_schedule.show()
+        self.btn_publish.setEnabled(True)
+        self.dt_schedule.setEnabled(True)
+        
+        self.log_signal.emit("예약 발행이 취소되었습니다.")
 
     def update_result_view(self, result_data):
         """결과 뷰어 업데이트 - TEXT만 표시"""
@@ -766,8 +940,17 @@ class InfoTab(QWidget):
         
         # 발행 버튼 활성화
         self.btn_publish.setEnabled(True)
+        self.btn_schedule.setEnabled(True)
+        self.dt_schedule.setMinimumDateTime(QDateTime.currentDateTime())
         
         self.log_signal.emit("글 생성 완료! 확인 후 발행할 수 있습니다.")
+        
+        # 원고 생성 완료 후 썸네일 자동 생성
+        if self.writing_settings_tab and self.writing_settings_tab.is_auto_thumbnail_enabled():
+            self.generate_thumbnail_auto()
+        
+        # 해시태그 자동 생성
+        self._auto_generate_tags()
 
     def _clean_to_plain_text(self, content: str) -> str:
         """
