@@ -32,6 +32,7 @@ from selenium.common.exceptions import (
 )
 
 from config import Config
+from naver_editor import NaverDocument
 
 logger = logging.getLogger(__name__)
 
@@ -1239,6 +1240,179 @@ class NaverBlogBot:
             logger.warning("Category dropdown not found")
         except Exception as e:
             logger.warning(f"Category selection failed: {e}")
+
+    def write_and_publish_via_json(
+        self, 
+        document: NaverDocument, 
+        category: str = ""
+    ) -> Tuple[bool, str]:
+        """
+        Publish blog post via JSON API (RabbitWrite.naver).
+        
+        Uses Selenium's execute_script to call fetch() from within the editor page,
+        preserving all cookies/session — identical to pressing the publish button.
+        
+        Args:
+            document: NaverDocument instance with all components added
+            category: Category name for the post
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        if not self.driver:
+            return False, "Browser not started"
+        
+        target_category = category or self.category
+        
+        try:
+            logger.info("Publishing via JSON API...")
+            
+            # Ensure we're on the editor page
+            current_url = self.driver.current_url
+            if "blog.naver.com" not in current_url:
+                return False, "Not on Naver blog page"
+            
+            payload_json = document.to_json()
+            logger.info(f"Payload size: {len(payload_json)} chars, "
+                        f"{len(document.components)} components")
+            
+            # Build the fetch script
+            # The editor page already has the session cookies, so fetch() works seamlessly
+            js_script = """
+            var payload = arguments[0];
+            var categoryNo = arguments[1];
+            
+            // Build form data matching the editor's publish request
+            var formData = new URLSearchParams();
+            formData.append('documentModel', payload);
+            formData.append('isUpdateRecent', 'true');
+            if (categoryNo) {
+                formData.append('categoryNo', categoryNo);
+            }
+            
+            return fetch('/RabbitWrite.naver', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json'
+                },
+                body: formData.toString(),
+                credentials: 'include'
+            })
+            .then(function(response) {
+                return response.text().then(function(text) {
+                    return {status: response.status, body: text, ok: response.ok};
+                });
+            })
+            .catch(function(error) {
+                return {status: 0, body: error.toString(), ok: false};
+            });
+            """
+            
+            # If category is specified, we need to resolve category number
+            # For now pass empty string — category selection may need separate handling
+            category_no = ""
+            if target_category:
+                category_no = self._resolve_category_no(target_category)
+            
+            # Execute fetch via Selenium
+            result = self.driver.execute_async_script(
+                """
+                var callback = arguments[arguments.length - 1];
+                var payload = arguments[0];
+                var categoryNo = arguments[1];
+                
+                var formData = new URLSearchParams();
+                formData.append('documentModel', payload);
+                formData.append('isUpdateRecent', 'true');
+                if (categoryNo) {
+                    formData.append('categoryNo', categoryNo);
+                }
+                
+                fetch('/RabbitWrite.naver', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': 'application/json'
+                    },
+                    body: formData.toString(),
+                    credentials: 'include'
+                })
+                .then(function(response) {
+                    return response.text().then(function(text) {
+                        callback({status: response.status, body: text, ok: response.ok});
+                    });
+                })
+                .catch(function(error) {
+                    callback({status: 0, body: error.toString(), ok: false});
+                });
+                """,
+                payload_json,
+                category_no
+            )
+            
+            if result and result.get("ok"):
+                logger.info(f"JSON publish success: status={result.get('status')}")
+                return True, "Published via JSON API"
+            else:
+                status = result.get("status", "unknown") if result else "no response"
+                body = result.get("body", "")[:200] if result else ""
+                logger.error(f"JSON publish failed: status={status}, body={body}")
+                return False, f"JSON publish failed (status={status}): {body}"
+                
+        except Exception as e:
+            logger.error(f"JSON publish error: {e}")
+            return False, f"JSON publish error: {str(e)}"
+
+    def _resolve_category_no(self, category_name: str) -> str:
+        """
+        Resolve category name to category number by querying the blog's category list.
+        
+        Args:
+            category_name: Display name of the category
+            
+        Returns:
+            Category number as string, or empty string if not found
+        """
+        try:
+            result = self.driver.execute_script("""
+                // Try to get category list from the page's JavaScript context
+                var categories = [];
+                
+                // Method 1: Check if blog category data is available in page context
+                try {
+                    var selects = document.querySelectorAll('select option, [class*="category"] li');
+                    for (var i = 0; i < selects.length; i++) {
+                        var el = selects[i];
+                        var text = el.innerText || el.textContent || '';
+                        var value = el.value || el.getAttribute('data-value') || '';
+                        if (text.trim() && value) {
+                            categories.push({name: text.trim(), value: value});
+                        }
+                    }
+                } catch(e) {}
+                
+                // Find matching category
+                var targetName = arguments[0];
+                for (var j = 0; j < categories.length; j++) {
+                    if (categories[j].name === targetName || 
+                        categories[j].name.indexOf(targetName) >= 0) {
+                        return categories[j].value;
+                    }
+                }
+                return '';
+            """, category_name)
+            
+            if result:
+                logger.info(f"Resolved category '{category_name}' -> no={result}")
+                return str(result)
+            else:
+                logger.warning(f"Could not resolve category: {category_name}")
+                return ""
+                
+        except Exception as e:
+            logger.warning(f"Category resolution error: {e}")
+            return ""
 
     def close(self):
         """Close browser and cleanup resources"""

@@ -1,11 +1,13 @@
 """
 Content Converter Module
-TEXT 기반 콘텐츠를 Markdown/HTML로 변환
+TEXT 기반 콘텐츠를 Markdown/HTML/NaverDocument JSON으로 변환
 네이버 블로그 에디터 스타일 지원
 """
 import re
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
+
+from naver_editor import NaverDocument
 
 
 @dataclass
@@ -584,3 +586,75 @@ def text_to_naver_html(text: str, title: str = "") -> str:
     """TEXT를 네이버 블로그 HTML로 변환하는 편의 함수"""
     converter = ContentConverter()
     return converter.text_to_html(text, title, for_naver=True)
+
+
+def text_to_naver_document(
+    text: str,
+    title: str = "",
+    style_settings: Optional[Dict] = None
+) -> NaverDocument:
+    """
+    TEXT를 NaverDocument (JSON API payload)로 변환하는 편의 함수.
+    
+    AI가 생성한 plain text를 파싱하여 네이버 에디터 JSON 컴포넌트로 변환합니다.
+    
+    Args:
+        text: AI 생성 본문 텍스트
+        title: 블로그 포스트 제목
+        style_settings: 스타일 설정 딕셔너리 (선택)
+        
+    Returns:
+        NaverDocument instance ready for to_payload() / to_json()
+    """
+    converter = ContentConverter(style_settings)
+    parsed = converter.parse_text_content(text)
+    
+    doc = NaverDocument()
+    
+    # Title
+    doc_title = title or parsed.get("title", "")
+    if doc_title:
+        doc.add_title(doc_title)
+    
+    # Sections
+    for section in parsed.get("sections", []):
+        # Section heading -> sectionTitle
+        heading = section.get("heading", "")
+        if heading:
+            doc.add_section_title(heading, bold=True, font_size_code="fs24")
+        
+        # Section content -> text / quotation / horizontalLine
+        text_buffer: list = []  # accumulate consecutive paragraphs
+        
+        def _flush_text_buffer():
+            if text_buffer:
+                doc.add_text(text_buffer.copy())
+                text_buffer.clear()
+        
+        for item in section.get("content", []):
+            item_type = item.get("type", "paragraph")
+            item_text = item.get("text", "")
+            
+            if item_type == "paragraph":
+                text_buffer.append(item_text)
+            elif item_type == "question":
+                _flush_text_buffer()
+                # Q as bold text
+                doc.add_text([
+                    [("Q. " + item_text, {"bold": True})]
+                ])
+            elif item_type == "answer":
+                # A as normal text
+                doc.add_text("A. " + item_text)
+            elif item_type == "list_item":
+                # Accumulate as regular paragraph (Naver JSON doesn't have list ctype)
+                text_buffer.append("- " + item_text)
+            elif item_type == "divider":
+                _flush_text_buffer()
+                doc.add_horizontal_line()
+            else:
+                text_buffer.append(item_text)
+        
+        _flush_text_buffer()
+    
+    return doc

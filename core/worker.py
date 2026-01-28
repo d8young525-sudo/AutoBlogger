@@ -10,6 +10,7 @@ from PySide6.QtCore import QThread, Signal
 
 from automation import NaverBlogBot
 from config import Config
+from core.content_converter import text_to_naver_document
 
 logger = logging.getLogger(__name__)
 
@@ -223,28 +224,53 @@ class AutomationWorker(QThread):
             if self._is_cancelled:
                 return
             
-            # Step 4: Write content
-            self.log_signal.emit("✍️ 본문 작성 중...")
+            # Step 4: Build JSON document and publish via API
+            self.log_signal.emit("JSON 문서 생성 중...")
             self.progress_signal.emit(85)
             
-            success, msg = self.bot.write_content(title, content)
-            if not success:
-                self.log_signal.emit(f"❌ 작성 실패: {msg}")
+            try:
+                naver_doc = text_to_naver_document(content, title)
+                self.log_signal.emit(
+                    f"JSON 문서 생성 완료 ({len(naver_doc.components)} components)"
+                )
+            except Exception as e:
+                self.log_signal.emit(f"JSON 문서 생성 실패: {e}, DOM 방식으로 전환...")
+                # Fallback to DOM manipulation
+                success, msg = self.bot.write_content(title, content)
+                if not success:
+                    self.log_signal.emit(f"작성 실패: {msg}")
+                    return
+                if self._is_cancelled:
+                    return
+                success, msg = self.bot.publish_post(category=category)
+                if success:
+                    self.log_signal.emit("발행 완료! (DOM 방식)")
+                else:
+                    self.log_signal.emit(f"발행 실패: {msg}")
                 return
             
             if self._is_cancelled:
                 return
             
-            # Step 5: Publish (with category)
-            self.log_signal.emit("📤 발행 중...")
+            # Step 5: Publish via JSON API
+            self.log_signal.emit("JSON API로 발행 중...")
             self.progress_signal.emit(95)
             
-            success, msg = self.bot.publish_post(category=category)
+            success, msg = self.bot.write_and_publish_via_json(naver_doc, category=category)
             if success:
-                self.log_signal.emit("🎉 발행 완료!")
+                self.log_signal.emit("발행 완료!")
                 self.progress_signal.emit(100)
             else:
-                self.log_signal.emit(f"❌ 발행 실패: {msg}")
+                self.log_signal.emit(f"JSON 발행 실패: {msg}")
+                self.log_signal.emit("DOM 방식으로 재시도...")
+                # Fallback to DOM manipulation
+                success, msg = self.bot.write_content(title, content)
+                if success and not self._is_cancelled:
+                    success, msg = self.bot.publish_post(category=category)
+                if success:
+                    self.log_signal.emit("발행 완료! (DOM fallback)")
+                else:
+                    self.log_signal.emit(f"발행 실패: {msg}")
                 
         except Exception as e:
             self.log_signal.emit(f"💥 치명적 오류: {str(e)}")
