@@ -171,7 +171,9 @@ class InfoTab(QWidget):
         self.combo_cat.setEditable(True)
         self.combo_cat.addItems([
             "차량 관리 상식", "자동차 보험/사고처리", "리스/렌트/할부 금융", 
-            "교통법규/범칙금", "자동차 여행 코스", "전기차 라이프", "중고차 거래 팁"
+            "교통법규/범칙금", "자동차 여행 코스", "전기차 라이프", "중고차 거래 팁",
+            "신차 구매 가이드", "자동차 세금/등록/명의이전", "초보운전 팁",
+            "수입차 유지관리", "자동차 용품/액세서리"
         ])
         left_layout.addWidget(self.combo_cat)
         
@@ -222,7 +224,7 @@ class InfoTab(QWidget):
         
         self.topic_area = QScrollArea()
         self.topic_area.setWidgetResizable(True)
-        self.topic_area.setMinimumHeight(100)
+        self.topic_area.setMinimumHeight(220)
         self.topic_area.setStyleSheet("QScrollArea { border: 1px solid #ddd; background-color: #fafafa; }")
         self.topic_widget = QWidget()
         self.topic_group = QButtonGroup()
@@ -237,6 +239,13 @@ class InfoTab(QWidget):
         
         self.topic_area.setWidget(self.topic_widget)
         topic_layout.addWidget(self.topic_area)
+        
+        # ===== 주제 선택하기 버튼 (주제 분석 → 세부설정 반영) =====
+        self.btn_analyze = QPushButton("주제 선택하기")
+        self.btn_analyze.setObjectName("infoButton")
+        self.btn_analyze.clicked.connect(self.run_analysis)
+        self.btn_analyze.setEnabled(False)
+        topic_layout.addWidget(self.btn_analyze)
         
         # 레거시 호환용 (숨김 처리)
         self.category_frame = QFrame()
@@ -258,11 +267,6 @@ class InfoTab(QWidget):
         # ========== 2. 세부 설정 (항상 표시) ==========
         group_adv = QGroupBox("2. 세부 설정")
         adv_layout = QVBoxLayout()
-        
-        self.btn_analyze = QPushButton("주제 분석하기 (타겟/질문 자동 추출)")
-        self.btn_analyze.setObjectName("infoButton")
-        self.btn_analyze.clicked.connect(self.run_analysis)
-        adv_layout.addWidget(self.btn_analyze)
         
         adv_layout.addWidget(QLabel("타깃 독자 (1개만 선택):"))
         self.target_group = QButtonGroup()
@@ -334,10 +338,10 @@ class InfoTab(QWidget):
         
         adv_layout.addLayout(thumb_row)
         
-        # 썸네일 사용 체크
-        self.chk_use_thumbnail = QCheckBox("이 썸네일 사용하여 발행")
-        self.chk_use_thumbnail.setEnabled(False)
-        adv_layout.addWidget(self.chk_use_thumbnail)
+        # 썸네일 사용 안내 (자동 사용, 환경설정에서 끄기 가능)
+        thumb_use_info = QLabel("썸네일이 생성되면 자동으로 발행에 포함됩니다. (환경설정에서 변경 가능)")
+        thumb_use_info.setStyleSheet("color: #9A9AB0; font-size: 11px;")
+        adv_layout.addWidget(thumb_use_info)
         
         group_adv.setLayout(adv_layout)
         layout.addWidget(group_adv)
@@ -422,6 +426,16 @@ class InfoTab(QWidget):
         self.lbl_schedule_status = QLabel("")
         self.lbl_schedule_status.setStyleSheet("color: #9A9AB0; font-size: 12px;")
         publish_layout.addWidget(self.lbl_schedule_status)
+        
+        # 예약 발행 안내
+        schedule_info = QLabel(
+            "예약 발행은 앱이 설정한 시간에 자동으로 Selenium 브라우저를 통해 발행합니다.\n"
+            "네이버 에디터의 예약발행(10분 단위)과 다르게, 1분 단위로 자유롭게 설정 가능합니다.\n"
+            "단, 앱이 실행 중이어야 예약 발행이 동작합니다."
+        )
+        schedule_info.setStyleSheet("color: #9A9AB0; font-size: 11px; padding: 5px; background-color: #FFF8F6; border-radius: 4px;")
+        schedule_info.setWordWrap(True)
+        publish_layout.addWidget(schedule_info)
         
         group_publish.setLayout(publish_layout)
         layout.addWidget(group_publish)
@@ -607,13 +621,14 @@ class InfoTab(QWidget):
     def on_topic_changed(self, checked: bool):
         """주제 변경 시 호출"""
         if checked:
+            # 주제 선택하기 버튼 활성화
+            self.btn_analyze.setEnabled(True)
+            
             # 주제가 변경되면 썸네일 관련 상태 초기화
             new_topic = self.get_selected_topic()
             if new_topic and new_topic != self.current_topic_for_thumbnail:
                 self.thumbnail_image = None
-                self.thumbnail_preview.setText("원고 생성 후 자동 생성됩니다")
-                self.chk_use_thumbnail.setChecked(False)
-                self.chk_use_thumbnail.setEnabled(False)
+                self.thumbnail_preview.setText("주제 선택 후 자동 생성됩니다")
                 self.btn_regenerate_thumbnail.setEnabled(False)
                 
                 self.current_topic_for_thumbnail = new_topic
@@ -634,17 +649,21 @@ class InfoTab(QWidget):
             
         self.log_signal.emit(f"'{topic}' 주제를 심층 분석 중입니다...")
         self.btn_analyze.setEnabled(False)
-        self.btn_analyze.setText("분석 중...")
+        self.btn_analyze.setText("주제 분석 중...")
         
         self.analysis_worker = AnalysisWorker(topic)
         self.analysis_worker.finished.connect(self.on_analysis_finished)
         self.analysis_worker.error.connect(self.on_analysis_error)
         self.analysis_worker.start()
+        
+        # 주제 선택 시 썸네일도 동시 생성
+        if self.writing_settings_tab and self.writing_settings_tab.is_auto_thumbnail_enabled():
+            self.generate_thumbnail_auto()
 
     def on_analysis_finished(self, data):
         """분석 완료"""
         self.btn_analyze.setEnabled(True)
-        self.btn_analyze.setText("주제 분석하기 (타겟/질문 추출)")
+        self.btn_analyze.setText("주제 선택하기")
         
         for i in reversed(range(self.target_layout.count())):
             widget = self.target_layout.itemAt(i).widget()
@@ -680,7 +699,7 @@ class InfoTab(QWidget):
     def on_analysis_error(self, error_msg: str):
         """분석 에러"""
         self.btn_analyze.setEnabled(True)
-        self.btn_analyze.setText("주제 분석하기 (타겟/질문 추출)")
+        self.btn_analyze.setText("주제 선택하기")
         self.log_signal.emit(f"{error_msg}")
 
     def request_generate(self):
@@ -762,10 +781,8 @@ class InfoTab(QWidget):
         if self.writing_settings_tab:
             category = self.writing_settings_tab.get_info_category()
         
-        # 썸네일 이미지
-        thumbnail = None
-        if self.chk_use_thumbnail.isChecked() and self.thumbnail_image:
-            thumbnail = self.thumbnail_image
+        # 썸네일 이미지 (생성되었으면 무조건 사용)
+        thumbnail = self.thumbnail_image if self.thumbnail_image else None
         
         # 해시태그
         tags = self.txt_tags.text().strip()
@@ -793,8 +810,6 @@ class InfoTab(QWidget):
                 pixmap = QPixmap.fromImage(qimg)
                 scaled = pixmap.scaled(200, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.thumbnail_preview.setPixmap(scaled)
-                self.chk_use_thumbnail.setEnabled(True)
-                self.chk_use_thumbnail.setChecked(True)
             except:
                 self.thumbnail_preview.setText("로드 실패")
             
@@ -914,7 +929,26 @@ class InfoTab(QWidget):
         # content_text 우선, 없으면 content 사용
         content = result_data.get("content_text", "") or result_data.get("content", "")
         
-        # JSON 형태로 온 경우 정리
+        # blocks에서 텍스트 추출 (content가 비어있을 때)
+        if not content and "blocks" in result_data:
+            blocks = result_data["blocks"]
+            lines = []
+            for block in blocks:
+                btype = block.get("type", "paragraph")
+                if btype == "heading":
+                    lines.append(f"\n【{block.get('text', '')}】\n")
+                elif btype == "paragraph":
+                    lines.append(block.get("text", ""))
+                elif btype == "list":
+                    for item in block.get("items", []):
+                        lines.append(f"  - {item}")
+                elif btype == "quotation":
+                    lines.append(f"\n「{block.get('text', '')}」\n")
+                elif btype == "divider":
+                    lines.append("\n━━━━━━━━━━━━━━━━━━━━\n")
+            content = "\n".join(lines)
+        
+        # JSON 문자열로 온 경우 정리
         if content and content.strip().startswith("{"):
             try:
                 import json

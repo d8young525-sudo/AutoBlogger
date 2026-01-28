@@ -1414,6 +1414,94 @@ class NaverBlogBot:
             logger.warning(f"Category resolution error: {e}")
             return ""
 
+    def input_tags(self, tags: str) -> Tuple[bool, str]:
+        """
+        네이버 에디터 태그 입력란에 태그 입력
+        
+        네이버 에디터 태그 구조:
+        - 태그 입력란: input.tag_input__bEMda 또는 input[placeholder*='태그']
+        - 각 태그 입력 후 Enter로 확정
+        
+        Args:
+            tags: 쉼표로 구분된 태그 문자열 (예: "자동차, 엔진오일, 관리")
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        if not self.driver or not tags:
+            return False, "No tags to input"
+        
+        try:
+            logger.info(f"Inputting tags: {tags}")
+            
+            self._ensure_in_editor()
+            
+            # 태그 목록 파싱
+            tag_list = [t.strip().replace('#', '') for t in tags.split(',') if t.strip()]
+            if not tag_list:
+                return False, "No valid tags"
+            
+            # 태그 입력란 찾기
+            tag_input = None
+            tag_selectors = [
+                "input.tag_input__bEMda",
+                "input[placeholder*='태그']",
+                "input[placeholder*='tag']",
+                ".tag_area input",
+                "[class*='tag_input'] input",
+                "[class*='tag'] input[type='text']"
+            ]
+            
+            for selector in tag_selectors:
+                try:
+                    tag_input = WebDriverWait(self.driver, 3).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                    )
+                    break
+                except TimeoutException:
+                    continue
+            
+            if not tag_input:
+                # 스크롤 다운하여 태그 입력란 찾기
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1)
+                
+                for selector in tag_selectors:
+                    try:
+                        tag_input = WebDriverWait(self.driver, 3).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                        )
+                        break
+                    except TimeoutException:
+                        continue
+            
+            if not tag_input:
+                logger.warning("Tag input field not found")
+                return False, "Tag input field not found"
+            
+            # 태그 하나씩 입력 (최대 10개)
+            entered_count = 0
+            for tag in tag_list[:10]:
+                try:
+                    tag_input.click()
+                    time.sleep(0.2)
+                    tag_input.clear()
+                    tag_input.send_keys(tag)
+                    time.sleep(0.3)
+                    tag_input.send_keys(Keys.ENTER)
+                    time.sleep(0.3)
+                    entered_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to input tag '{tag}': {e}")
+                    continue
+            
+            logger.info(f"Tags entered: {entered_count}/{len(tag_list)}")
+            return True, f"{entered_count} tags entered"
+            
+        except Exception as e:
+            logger.error(f"Tag input failed: {e}")
+            return False, f"Tag input error: {str(e)}"
+
     def close(self):
         """Close browser and cleanup resources"""
         if self.driver:

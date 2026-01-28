@@ -120,6 +120,15 @@ class AutomationWorker(QThread):
         prompt_payload = {
             "mode": "write",
             "topic": topic,
+            "targets": self.data.get('targets', []),
+            "questions": self.data.get('questions', []),
+            "summary": self.data.get('summary', ''),
+            "insight": self.data.get('insight', ''),
+            "tone": self.data.get('tone', '친근한 이웃 (해요체)'),
+            "length": self.data.get('length', '보통 (1,500자)'),
+            "emoji_level": emoji_inst,
+            "intro": self.settings.get('intro', ''),
+            "outro": self.settings.get('outro', ''),
             "prompt": f"""
                 타겟: {", ".join(self.data.get('targets', []))}
                 질문: {" / ".join(self.data.get('questions', []))}
@@ -132,7 +141,7 @@ class AutomationWorker(QThread):
                 맺음말: {self.settings.get('outro', '')}
             """,
             "style_options": str(self.data.get('style_options', {})),
-            "naver_style": naver_style  # 네이버 에디터 서식 설정 추가
+            "naver_style": naver_style
         }
 
         try:
@@ -224,6 +233,16 @@ class AutomationWorker(QThread):
             
             if self._is_cancelled:
                 return
+            
+            # Step 3.5: 태그 입력
+            tags = self.data.get('tags', '')
+            if tags:
+                self.log_signal.emit(f"태그 입력 중...")
+                success, msg = self.bot.input_tags(tags)
+                if success:
+                    self.log_signal.emit(f"태그 입력 완료: {msg}")
+                else:
+                    self.log_signal.emit(f"태그 입력 실패 (계속 진행): {msg}")
             
             # Step 4: Build JSON document and publish via API
             self.log_signal.emit("JSON 문서 생성 중...")

@@ -81,12 +81,35 @@ class LoginDialog(QDialog):
         self.login_status.setStyleSheet("color: #888; font-size: 12px;")
         login_layout.addWidget(self.login_status)
         
-        # 비밀번호 찾기 링크
+        # 비밀번호 찾기 (인라인)
         self.btn_forgot = QPushButton("비밀번호를 잊으셨나요?")
         self.btn_forgot.setObjectName("linkButton")
         self.btn_forgot.setCursor(Qt.PointingHandCursor if hasattr(Qt, 'PointingHandCursor') else 13)
-        self.btn_forgot.clicked.connect(lambda: self.tabs.setCurrentIndex(2))
+        self.btn_forgot.clicked.connect(self._toggle_reset_form)
         login_layout.addWidget(self.btn_forgot)
+        
+        # 비밀번호 재설정 폼 (기본 숨김)
+        self.reset_frame = QWidget()
+        reset_form_layout = QVBoxLayout(self.reset_frame)
+        reset_form_layout.setContentsMargins(0, 5, 0, 0)
+        
+        reset_info = QLabel("가입한 이메일로 비밀번호 재설정 링크를 보내드립니다.")
+        reset_info.setStyleSheet("color: #888; font-size: 12px;")
+        reset_form_layout.addWidget(reset_info)
+        
+        reset_email_row = QHBoxLayout()
+        self.reset_email = QLineEdit()
+        self.reset_email.setPlaceholderText("가입 이메일 입력")
+        reset_email_row.addWidget(self.reset_email)
+        
+        self.btn_reset = QPushButton("재설정 링크 발송")
+        self.btn_reset.setObjectName("secondaryButton")
+        self.btn_reset.clicked.connect(self.do_reset_password)
+        reset_email_row.addWidget(self.btn_reset)
+        reset_form_layout.addLayout(reset_email_row)
+        
+        self.reset_frame.hide()
+        login_layout.addWidget(self.reset_frame)
         
         login_tab.setLayout(login_layout)
         self.tabs.addTab(login_tab, "로그인")
@@ -128,35 +151,6 @@ class LoginDialog(QDialog):
         register_tab.setLayout(register_layout)
         self.tabs.addTab(register_tab, "회원가입")
         
-        # ===== 비밀번호 찾기 탭 =====
-        reset_tab = QWidget()
-        reset_layout = QVBoxLayout()
-        
-        reset_info = QLabel("가입한 이메일 주소를 입력하시면\n비밀번호 재설정 링크를 보내드립니다.")
-        reset_info.setStyleSheet("color: #888; font-size: 12px; margin: 10px 0;")
-        reset_layout.addWidget(reset_info)
-        
-        reset_form = QFormLayout()
-        self.reset_email = QLineEdit()
-        self.reset_email.setPlaceholderText("example@email.com")
-        reset_form.addRow("이메일:", self.reset_email)
-        reset_layout.addLayout(reset_form)
-        
-        self.btn_reset = QPushButton("비밀번호 재설정 링크 보내기")
-        self.btn_reset.setObjectName("secondaryButton")
-        self.btn_reset.clicked.connect(self.do_reset_password)
-        reset_layout.addWidget(self.btn_reset)
-        
-        # 로그인으로 돌아가기
-        self.btn_back_login = QPushButton("← 로그인으로 돌아가기")
-        self.btn_back_login.setObjectName("linkButton")
-        self.btn_back_login.clicked.connect(lambda: self.tabs.setCurrentIndex(0))
-        reset_layout.addWidget(self.btn_back_login)
-        
-        reset_layout.addStretch()
-        reset_tab.setLayout(reset_layout)
-        self.tabs.addTab(reset_tab, "비밀번호 찾기")
-        
         layout.addWidget(self.tabs)
         
         # 하단 취소 버튼
@@ -183,6 +177,17 @@ class LoginDialog(QDialog):
         self.settings.setValue("auth_email", email)
         self.settings.setValue("auth_token", token)
         self.settings.setValue("auth_uid", user_data.get("localId", ""))
+    
+    def _toggle_reset_form(self):
+        """비밀번호 재설정 폼 토글"""
+        if self.reset_frame.isVisible():
+            self.reset_frame.hide()
+            self.btn_forgot.setText("비밀번호를 잊으셨나요?")
+        else:
+            self.reset_frame.show()
+            self.reset_email.setText(self.login_email.text().strip())
+            self.reset_email.setFocus()
+            self.btn_forgot.setText("닫기")
     
     def do_login(self):
         """로그인 실행"""
@@ -350,8 +355,9 @@ class LoginDialog(QDialog):
                     f"(스팸함도 확인해주세요)"
                 )
                 
-                # 로그인 탭으로 전환
-                self.tabs.setCurrentIndex(0)
+                # 폼 숨기기
+                self.reset_frame.hide()
+                self.btn_forgot.setText("비밀번호를 잊으셨나요?")
                 self.login_email.setText(email)
                 
             else:
@@ -372,7 +378,7 @@ class LoginDialog(QDialog):
             QMessageBox.warning(self, "오류", f"발송 중 오류 발생: {str(e)}")
         finally:
             self.btn_reset.setEnabled(True)
-            self.btn_reset.setText("비밀번호 재설정 링크 보내기")
+            self.btn_reset.setText("재설정 링크 발송")
     
     def _create_firestore_user(self, id_token: str, email: str):
         """회원가입 후 Firestore에 사용자 문서 즉시 생성"""

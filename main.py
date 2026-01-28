@@ -34,6 +34,7 @@ def run_gui():
         from ui.settings_tab import SettingsTab
         from ui.writing_settings_tab import WritingSettingsTab
         from ui.delivery_tab import DeliveryTab
+        from ui.content_manager_tab import ContentManagerTab
         from ui.login_dialog import LoginDialog
         from ui.styles import get_app_stylesheet
         from core.worker import AutomationWorker
@@ -94,10 +95,12 @@ def run_gui():
             # info_tab, delivery_tab에 글쓰기 환경설정 탭 연결
             self.tab_info = InfoTab(writing_settings_tab=self.tab_writing_settings)
             self.tab_delivery = DeliveryTab(writing_settings_tab=self.tab_writing_settings)
+            self.tab_content_manager = ContentManagerTab()
             
             # 탭 추가 (순서 변경: 글쓰기 환경설정을 환경설정 앞에)
             self.tabs.addTab(self.tab_info, "정보성 글쓰기")
             self.tabs.addTab(self.tab_delivery, "출고 후기")
+            self.tabs.addTab(self.tab_content_manager, "컨텐츠 관리")
             self.tabs.addTab(self.tab_writing_settings, "글쓰기 환경설정")
             self.tabs.addTab(self.tab_settings, "환경 설정")
             
@@ -255,7 +258,7 @@ def run_gui():
             if data.get("action") in ["publish_only", "full"]:
                 if not user_id or not user_pw:
                     self.update_log("❌ 오류: [환경 설정] 탭에서 네이버 ID/PW를 먼저 저장해주세요.")
-                    self.tabs.setCurrentIndex(3)  # 환경 설정 탭으로 이동
+                    self.tabs.setCurrentIndex(4)  # 환경 설정 탭으로 이동
                     return
 
             # 카테고리 정보 가져오기 (글쓰기 환경설정에서)
@@ -287,6 +290,8 @@ def run_gui():
 
         def on_worker_result(self, result):
             """워커 결과 처리"""
+            self.update_log(f"결과 수신: title={result.get('title', 'N/A')}, content 길이={len(result.get('content_text', '') or result.get('content', ''))}")
+            
             # 현재 탭에 따라 결과 전달
             current_tab = self.tabs.currentIndex()
             if current_tab == 0:  # 정보성 글쓰기
