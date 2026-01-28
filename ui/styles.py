@@ -4,35 +4,35 @@ Auto Blogger Pro - UI 스타일 테마
 """
 
 # ============================================================
-# Color Constants
+# Color Constants - Coral/Orange Theme
 # ============================================================
-PRIMARY = "#2D6A4F"
-PRIMARY_LIGHT = "#40916C"
-PRIMARY_DARK = "#1B4332"
-PRIMARY_HOVER = "#357A5B"
+PRIMARY = "#FF6B6B"
+PRIMARY_LIGHT = "#FF8E8E"
+PRIMARY_DARK = "#E04E4E"
+PRIMARY_HOVER = "#FF5252"
 
-ACCENT = "#D4A853"
-ACCENT_HOVER = "#C49A45"
+ACCENT = "#FF8E53"
+ACCENT_HOVER = "#F07A3F"
 
-BG_MAIN = "#F5F5F5"
+BG_MAIN = "#FFF8F6"
 BG_CARD = "#FFFFFF"
-BG_INPUT = "#FAFAFA"
-BG_SIDEBAR = "#F0F0F0"
+BG_INPUT = "#FFFAF8"
+BG_SIDEBAR = "#FFF0EC"
 
-TEXT_PRIMARY = "#1A1A2E"
-TEXT_SECONDARY = "#555555"
-TEXT_MUTED = "#888888"
+TEXT_PRIMARY = "#2D2D3A"
+TEXT_SECONDARY = "#5A5A6E"
+TEXT_MUTED = "#9A9AB0"
 TEXT_WHITE = "#FFFFFF"
 
-BORDER_LIGHT = "#E0E0E0"
-BORDER_MEDIUM = "#CCCCCC"
+BORDER_LIGHT = "#FFE0D6"
+BORDER_MEDIUM = "#FFCBBE"
 BORDER_FOCUS = PRIMARY
 
-DANGER = "#C0392B"
-DANGER_HOVER = "#A93226"
-WARNING = "#E67E22"
-SUCCESS = "#27AE60"
-INFO = "#2980B9"
+DANGER = "#E53E3E"
+DANGER_HOVER = "#C53030"
+WARNING = "#F6AD55"
+SUCCESS = "#48BB78"
+INFO = "#4299E1"
 
 
 def get_app_stylesheet() -> str:
@@ -78,7 +78,7 @@ def get_app_stylesheet() -> str:
     }}
 
     QTabBar::tab:hover:!selected {{
-        background-color: #E8E8E8;
+        background-color: #FFF0EC;
         color: {TEXT_PRIMARY};
     }}
 
@@ -162,7 +162,7 @@ def get_app_stylesheet() -> str:
 
     QPushButton[objectName="secondaryButton"]:hover,
     QPushButton#secondaryButton:hover {{
-        background-color: #EAF5EF;
+        background-color: #FFF0EC;
     }}
 
     /* Accent buttons */
@@ -190,7 +190,7 @@ def get_app_stylesheet() -> str:
 
     QPushButton[objectName="infoButton"]:hover,
     QPushButton#infoButton:hover {{
-        background-color: #2471A3;
+        background-color: #3182CE;
     }}
 
     /* Link-style buttons (no border) */
@@ -262,7 +262,7 @@ def get_app_stylesheet() -> str:
     QComboBox QAbstractItemView {{
         background-color: {BG_CARD};
         border: 1px solid {BORDER_LIGHT};
-        selection-background-color: #EAF5EF;
+        selection-background-color: #FFF0EC;
         selection-color: {PRIMARY_DARK};
         padding: 4px;
     }}
@@ -358,7 +358,7 @@ def get_app_stylesheet() -> str:
     }}
 
     QListWidget::item:hover {{
-        background-color: #EAF5EF;
+        background-color: #FFF0EC;
     }}
 
     QListWidget::item:selected {{

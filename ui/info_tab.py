@@ -118,10 +118,9 @@ class InfoTab(QWidget):
         self.generated_content = ""
         self.generated_title = ""
         
-        # 썸네일 재생성 횟수 추적 (주제별)
+        # 썸네일 재생성 횟수 추적 (주제별) - 서버 측에서 일/월 한도 관리
         self.current_topic_for_thumbnail = ""
         self.thumbnail_regenerate_count = 0
-        self.max_regenerate_count = 2  # 최대 재생성 횟수
         
         self.init_ui()
 
@@ -149,9 +148,9 @@ class InfoTab(QWidget):
         left_card = QFrame()
         left_card.setStyleSheet("""
             QFrame { 
-                border: 2px solid #2D6A4F; 
+                border: 2px solid #FF6B6B; 
                 border-radius: 8px; 
-                background-color: #F0F7F4; 
+                background-color: #FFF0EC; 
                 padding: 10px;
             }
         """)
@@ -393,27 +392,15 @@ class InfoTab(QWidget):
         self.thumbnail_worker.start()
 
     def regenerate_thumbnail(self):
-        """썸네일 재생성 (버튼 클릭 시)"""
-        if self.thumbnail_regenerate_count >= self.max_regenerate_count:
-            QMessageBox.warning(self, "제한 초과", 
-                f"이 주제에 대한 썸네일 재생성은 {self.max_regenerate_count}회까지만 가능합니다.\n"
-                "새로운 주제를 선택하면 다시 생성할 수 있습니다.")
-            return
-        
+        """썸네일 재생성 (버튼 클릭 시) - 서버 측 일/월 한도만 적용"""
         self.thumbnail_regenerate_count += 1
         self.update_regenerate_count_label()
         self.generate_thumbnail_auto()
 
     def update_regenerate_count_label(self):
-        """재생성 가능 횟수 라벨 업데이트"""
-        remaining = self.max_regenerate_count - self.thumbnail_regenerate_count
-        self.lbl_regenerate_count.setText(f"재생성 가능: {remaining}회")
-        
-        if remaining <= 0:
-            self.lbl_regenerate_count.setStyleSheet("color: #C0392B; font-size: 12px;")
-            self.btn_regenerate_thumbnail.setEnabled(False)
-        else:
-            self.lbl_regenerate_count.setStyleSheet("color: #888; font-size: 12px;")
+        """재생성 횟수 라벨 업데이트 (참고 표시만)"""
+        self.lbl_regenerate_count.setText(f"재생성 횟수: {self.thumbnail_regenerate_count}회")
+        self.lbl_regenerate_count.setStyleSheet("color: #9A9AB0; font-size: 12px;")
 
     def toggle_topic_mode(self):
         """주제 입력 모드 토글 - 선택에 따라 카드 스타일 및 입력 필드 활성화/비활성화"""
@@ -421,9 +408,9 @@ class InfoTab(QWidget):
             # 카테고리 카드 활성화
             self.left_card.setStyleSheet("""
                 QFrame { 
-                    border: 2px solid #2D6A4F; 
+                    border: 2px solid #FF6B6B; 
                     border-radius: 8px; 
-                    background-color: #F0F7F4; 
+                    background-color: #FFF0EC; 
                     padding: 10px;
                 }
             """)
@@ -451,9 +438,9 @@ class InfoTab(QWidget):
             """)
             self.right_card.setStyleSheet("""
                 QFrame { 
-                    border: 2px solid #2D6A4F; 
+                    border: 2px solid #FF6B6B; 
                     border-radius: 8px; 
-                    background-color: #F0F7F4; 
+                    background-color: #FFF0EC; 
                     padding: 10px;
                 }
             """)

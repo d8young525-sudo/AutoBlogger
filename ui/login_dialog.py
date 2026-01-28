@@ -48,7 +48,7 @@ class LoginDialog(QDialog):
         
         # 앱 로고/타이틀
         title_label = QLabel("Auto Blogger Pro")
-        title_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2D6A4F; margin: 10px 0;")
+        title_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #FF6B6B; margin: 10px 0;")
         title_label.setAlignment(Qt.AlignCenter if hasattr(Qt, 'AlignCenter') else 0x0004)
         layout.addWidget(title_label)
         

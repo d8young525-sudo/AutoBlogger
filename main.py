@@ -212,7 +212,7 @@ def run_gui():
             if self.user_info:
                 email = self.user_info.get("email", "")
                 self.lbl_user_email.setText(email)
-                self.lbl_user_email.setStyleSheet("color: #2D6A4F; font-weight: bold;")
+                self.lbl_user_email.setStyleSheet("color: #FF6B6B; font-weight: bold;")
                 
                 is_admin = self.user_info.get("is_admin", False)
                 if is_admin:
