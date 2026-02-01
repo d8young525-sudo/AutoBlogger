@@ -66,7 +66,11 @@ def convert_blocks_to_text(blocks: list) -> str:
         elif block_type == "quotation":
             text = block.get("text", "")
             lines.append(f"\n「{text}」\n")
-    
+
+        elif block_type == "image_placeholder":
+            desc = block.get("description", "")
+            lines.append(f"\n[📷 {desc}]\n" if desc else "\n[📷 이미지]\n")
+
     return "\n".join(lines).strip()
 
 
@@ -1202,69 +1206,181 @@ REMINDER: NO TEXT - use only visual symbols, icons, and shapes. No labels or cap
             # 인사말/마무리말 프롬프트 구성
             intro_instruction = f"[인사말] 다음 인사말로 글을 시작하세요: \"{intro}\"" if intro else ""
             outro_instruction = f"[마무리말] 다음 맺음말로 글을 마무리하세요: \"{outro}\"" if outro else ""
-            
-            full_prompt = f"""
+
+            # 포스팅 구조 스타일
+            structure_style = req_json.get("structure_style", "default")
+
+            # 구조 파라미터
+            sp = req_json.get("structure_params", {})
+            heading_count = sp.get("heading_count", 4)
+            quotation_count = sp.get("quotation_count", 2)
+            image_count = sp.get("image_count", 8)
+
+            # 질문 처리: 선택된 질문이 있으면 본문 하단에 자연스럽게 포함
+            questions_instruction = ""
+            if questions:
+                questions_instruction = f"""
+            [참고 질문 — 본문 흐름에 자연스럽게 녹여서 답변]
+            아래 질문들의 답변을 본문 각 섹션에 자연스럽게 포함하세요.
+            별도의 Q&A 섹션을 만들지 말고, 해당 소제목 아래 본문에서 자연스럽게 다루세요.
+            {chr(10).join([f"- {q}" for q in questions])}"""
+
+            # 공통 프롬프트 상단부
+            prompt_header = f"""
             [ROLE] 네이버 자동차 파워 블로거
             당신은 자동차에 대해 깊은 지식을 가진 전문 블로거입니다.
             최신 정보를 검색하여 정확하고 신뢰할 수 있는 정보를 제공하세요.
-            
+
             [TOPIC] {topic}
-            
+
             [STYLE]
             - 말투: {tone}
             - 분량: {char_count}자 이상
             - {emoji_instruction}
             - 타깃 독자: {target_str}
-            
+
             {intro_instruction}
-            
-            [QUESTIONS TO ANSWER]
-            {chr(10).join([f"- {q}" for q in questions]) if questions else "없음"}
-            
+
+            [글 작성 핵심 원칙]
+            - 정보 전달 위주의 자연스러운 블로그 글을 작성하세요
+            - Q&A 형식이나 선문답 형식으로 글 전체를 구성하지 마세요
+            - 소제목별로 구체적인 정보를 나열하는 구조로 작성하세요
+            - 각 문단은 실질적인 정보를 담고, 불필요한 수사를 줄이세요
+            {questions_instruction}
+
             [KEY POINTS]
             {summary if summary else "없음"}
-            
+
             [PERSONAL INSIGHT]
             {insight if insight else "없음"}
-            
+
             {outro_instruction}
-            
+            """
+
+            if structure_style == "popular":
+                ending_style = sp.get("ending_style", "요약")
+
+                # 마무리 스타일 프롬프트
+                if "CTA" in ending_style or "행동" in ending_style:
+                    ending_prompt = "독자에게 구체적 행동을 유도하는 CTA 마무리 (상담, 문의, 구독 등)"
+                elif "질문" in ending_style:
+                    ending_prompt = "독자에게 경험을 공유하도록 가벼운 질문 1개로 마무리"
+                else:
+                    ending_prompt = "핵심 내용을 간결하게 요약하는 마무리"
+
+                # 인기 블로그 구조 프롬프트
+                prompt_format = f"""
+            [포스팅 구조 규칙 - 네이버 인기 자동차 블로그 패턴]
+            반드시 아래 규칙을 따라 구조화된 JSON을 출력하세요.
+
+            1. 제목: 15~25자, 핵심 키워드를 제목 앞쪽에 배치
+            2. 도입부: 주제와 관련된 상황/배경을 자연스럽게 소개 (1~2문단)
+            3. 소제목(heading): 반드시 {heading_count}개 사용 (level: 2), 각 소제목은 구체적 정보를 담은 제목
+            4. 인용구(quotation): 최소 {quotation_count}개 — 핵심 수치/팁/주의사항 강조용
+            5. image_placeholder: 총 {image_count}개, 각 소제목 섹션마다 1~3개씩 본문 사이에 배치
+            6. 키워드: 본문 전체에 3~7회 자연스럽게 반복
+            7. 마지막 섹션: {ending_prompt}
+
+            [글 구조 가이드 — 정보 나열형]
+            paragraph(도입-상황/배경 소개) → image_placeholder →
+            heading(소제목1: 핵심 정보) → paragraph(구체적 설명) → image_placeholder → paragraph(추가 설명) →
+            heading(소제목2: 상세 정보) → paragraph(구체적 설명) → quotation(핵심 수치/팁 강조) → image_placeholder → paragraph →
+            heading(소제목3: 비교/팁) → paragraph → image_placeholder → list(체크리스트/비교항목) → image_placeholder →
+            heading(소제목4: 주의사항/추가정보) → paragraph → image_placeholder → paragraph →
+            heading(마무리) → quotation(핵심 요약) → paragraph({ending_prompt})
+
+            [OUTPUT FORMAT]
+            반드시 아래 형식의 JSON을 출력하세요:
+            {{
+                "title": "15~25자 SEO 최적화 제목 (핵심 키워드 앞배치)",
+                "blocks": [
+                    {{"type": "paragraph", "text": "주제 관련 상황/배경 자연스러운 도입..."}},
+                    {{"type": "image_placeholder", "description": "도입부 관련 이미지 설명"}},
+                    {{"type": "heading", "text": "구체적 소제목1", "level": 2}},
+                    {{"type": "paragraph", "text": "핵심 정보 설명 2~5문장..."}},
+                    {{"type": "image_placeholder", "description": "소제목1 관련 이미지 설명"}},
+                    {{"type": "paragraph", "text": "추가 설명 2~5문장..."}},
+                    {{"type": "heading", "text": "구체적 소제목2", "level": 2}},
+                    {{"type": "paragraph", "text": "상세 정보 설명..."}},
+                    {{"type": "quotation", "text": "핵심 수치나 팁을 강조하는 인용구"}},
+                    {{"type": "image_placeholder", "description": "소제목2 관련 이미지 설명"}},
+                    {{"type": "paragraph", "text": "부연 설명..."}},
+                    {{"type": "heading", "text": "구체적 소제목3", "level": 2}},
+                    {{"type": "paragraph", "text": "비교/팁 정보..."}},
+                    {{"type": "image_placeholder", "description": "소제목3 관련 이미지 설명"}},
+                    {{"type": "list", "style": "bullet", "items": ["체크항목1", "체크항목2", "체크항목3"]}},
+                    {{"type": "image_placeholder", "description": "리스트 관련 이미지 설명"}},
+                    {{"type": "heading", "text": "구체적 소제목4", "level": 2}},
+                    {{"type": "paragraph", "text": "주의사항/추가정보..."}},
+                    {{"type": "image_placeholder", "description": "소제목4 관련 이미지 설명"}},
+                    {{"type": "paragraph", "text": "마무리 전 정보..."}},
+                    {{"type": "heading", "text": "마무리", "level": 2}},
+                    {{"type": "quotation", "text": "글 전체 핵심을 요약하는 인용구"}},
+                    {{"type": "paragraph", "text": "깔끔한 마무리 요약..."}}
+                ]
+            }}
+
+            [BLOCK TYPES]
+            - "paragraph": 일반 본문 텍스트 (2~5문장, 구체적 정보 위주)
+            - "heading": 소제목 (level: 2=큰 소제목, 3=작은 소제목)
+            - "list": 목록 (style: "bullet"=●, "number"=1.2.3.)
+            - "divider": 구분선
+            - "quotation": 인용구 (핵심 수치, 팁, 주의사항 강조)
+            - "image_placeholder": 이미지 삽입 위치 (description: 해당 위치에 어울리는 이미지 설명)
+
+            [IMPORTANT]
+            - 최신 정보와 실제 데이터를 검색하여 포함
+            - 실용적이고 구체적인 정보 제공 (수치, 가격, 비교 데이터)
+            - Q&A 형식이 아닌 자연스러운 정보 나열로 작성
+            - 최소 {char_count}자 분량의 내용 (image_placeholder 제외)
+            - blocks 배열에 25~35개 블록 포함
+            - 각 paragraph는 2~5문장 정도로 충분히 작성
+            - heading은 반드시 {heading_count}개
+            - quotation은 반드시 {quotation_count}개 이상
+            - image_placeholder는 반드시 {image_count}개
+            - JSON 형식 외의 텍스트 출력 금지
+            """
+            else:
+                # 기본 구조 프롬프트
+                prompt_format = f"""
             [OUTPUT FORMAT - 구조화된 블록 형식]
             네이버 블로그 에디터에서 서식을 적용할 수 있도록 구조화된 JSON을 출력하세요.
-            
+
             반드시 아래 형식의 JSON을 출력하세요:
             {{
                 "title": "SEO 최적화된 매력적인 제목",
                 "blocks": [
-                    {{"type": "paragraph", "text": "인사말/서론 내용"}},
-                    {{"type": "heading", "text": "소제목1", "level": 2}},
-                    {{"type": "paragraph", "text": "본문 내용..."}},
+                    {{"type": "paragraph", "text": "주제 도입 및 배경 설명"}},
+                    {{"type": "heading", "text": "구체적 소제목1", "level": 2}},
+                    {{"type": "paragraph", "text": "핵심 정보 설명..."}},
                     {{"type": "list", "style": "bullet", "items": ["항목1", "항목2", "항목3"]}},
-                    {{"type": "divider"}},
-                    {{"type": "heading", "text": "소제목2", "level": 2}},
-                    {{"type": "paragraph", "text": "본문 내용..."}},
-                    {{"type": "quotation", "text": "강조하고 싶은 인용구 내용"}},
+                    {{"type": "heading", "text": "구체적 소제목2", "level": 2}},
+                    {{"type": "paragraph", "text": "상세 정보..."}},
+                    {{"type": "quotation", "text": "핵심 수치나 팁 강조"}},
+                    {{"type": "paragraph", "text": "부연 설명..."}},
                     {{"type": "heading", "text": "마무리", "level": 2}},
-                    {{"type": "paragraph", "text": "마무리 인사..."}}
+                    {{"type": "paragraph", "text": "핵심 내용 요약 마무리..."}}
                 ]
             }}
-            
+
             [BLOCK TYPES]
             - "paragraph": 일반 본문 텍스트 (여러 문장 가능)
             - "heading": 소제목 (level: 2=큰 소제목, 3=작은 소제목)
             - "list": 목록 (style: "bullet"=●, "number"=1.2.3.)
             - "divider": 구분선
-            - "quotation": 인용구 (강조하고 싶은 핵심 문구)
-            
+            - "quotation": 인용구 (핵심 수치, 팁 강조)
+
             [IMPORTANT]
             - 최신 정보와 실제 데이터를 검색하여 포함
-            - 실용적이고 구체적인 정보 제공
-            - 독자가 바로 활용할 수 있는 팁 포함
+            - 자연스러운 정보 나열 형식으로 작성 (Q&A 형식 금지)
+            - 소제목 최소 {heading_count}개, 인용구 최소 {quotation_count}개 사용
             - 최소 {char_count}자 분량의 내용
             - blocks 배열에 10~20개 블록 포함
             - 각 paragraph는 2~5문장 정도로 충분히 작성
             - JSON 형식 외의 텍스트 출력 금지
             """
+
+            full_prompt = prompt_header + prompt_format
 
             # Grounding with Google Search로 최신 정보 반영
             resp = client.models.generate_content(

@@ -1,0 +1,88 @@
+{
+  "packs": {
+    "cafe_001": {
+      "sprite_size": [
+        324,
+        800
+      ],
+      "cell_size": [
+        108,
+        99
+      ],
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/cafe_001/original_preview.png"
+    },
+    "cafe_002": {
+      "sprite_size": [
+        324,
+        800
+      ],
+      "cell_size": [
+        108,
+        99
+      ],
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/cafe_002/original_preview.png"
+    },
+    "cafe_004": {
+      "sprite_size": [
+        324,
+        1000
+      ],
+      "cell_size": [
+        108,
+        99
+      ],
+      "sticker_count": 30,
+      "sprite_url": "https://storep-phinf.pstatic.net/cafe_004/original_preview.png"
+    },
+    "cafe_005": {
+      "sprite_size": [
+        324,
+        900
+      ],
+      "cell_size": [
+        108,
+        99
+      ],
+      "sticker_count": 27,
+      "sprite_url": "https://storep-phinf.pstatic.net/cafe_005/original_preview.png"
+    },
+    "clip_001": {
+      "sprite_size": [
+        324,
+        800
+      ],
+      "cell_size": [
+        108,
+        99
+      ],
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/clip_001/original_preview.png"
+    },
+    "motion2d_01": {
+      "sprite_size": [
+        324,
+        800
+      ],
+      "cell_size": [
+        108,
+        99
+      ],
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/motion2d_01/original_preview.png"
+    },
+    "motion3d_02": {
+      "sprite_size": [
+        324,
+        800
+      ],
+      "cell_size": [
+        108,
+        99
+      ],
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/motion3d_02/original_preview.png"
+    }
+  }
+}

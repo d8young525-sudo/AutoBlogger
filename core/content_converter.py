@@ -658,3 +658,111 @@ def text_to_naver_document(
         _flush_text_buffer()
     
     return doc
+
+
+def blocks_to_naver_document(
+    blocks: list,
+    title: str = "",
+    style_settings: Optional[Dict] = None,
+    images: Optional[list] = None
+) -> NaverDocument:
+    """
+    AI가 생성한 블록 배열을 NaverDocument로 변환하는 함수.
+
+    인기 블로그 스타일 프롬프트에서 반환된 blocks JSON을 직접 처리합니다.
+    image_placeholder 블록은 images 리스트에서 순서대로 이미지를 삽입합니다.
+
+    Args:
+        blocks: AI 응답의 blocks 배열 (list of dict)
+        title: 블로그 포스트 제목
+        style_settings: 네이버 에디터 스타일 설정
+        images: 업로드된 이미지 메타데이터 리스트 (각 항목은 dict with src, path, width, height 등)
+
+    Returns:
+        NaverDocument instance
+    """
+    doc = NaverDocument()
+    image_list = list(images) if images else []
+    image_idx = 0
+
+    # 스타일 설정 파싱
+    settings = style_settings or {}
+    font_family = settings.get("font_family", "nanumgothic")
+    font_size = settings.get("font_size", "fs15")
+    heading_bold = settings.get("heading_bold", True)
+    heading_font_size = settings.get("heading_font_size", "fs24")
+    heading_color = settings.get("heading_color")
+    quote_layout = settings.get("quote_layout", "quotation_line")
+    divider_layout = settings.get("divider_layout", "line1")
+
+    if title:
+        doc.add_title(title)
+
+    for block in blocks:
+        block_type = block.get("type", "paragraph")
+
+        if block_type == "paragraph":
+            text = block.get("text", "")
+            if text:
+                doc.add_text(
+                    text,
+                    font_family=font_family,
+                    font_size_code=font_size
+                )
+
+        elif block_type == "heading":
+            heading_text = block.get("text", "")
+            level = block.get("level", 2)
+            if heading_text:
+                fs = heading_font_size if level == 2 else "fs18"
+                kwargs = {
+                    "bold": heading_bold,
+                    "font_size_code": fs,
+                }
+                if heading_color:
+                    kwargs["font_color"] = heading_color
+                doc.add_section_title(heading_text, **kwargs)
+
+        elif block_type == "quotation":
+            text = block.get("text", "")
+            if text:
+                doc.add_quotation(text, layout=quote_layout)
+
+        elif block_type == "list":
+            items = block.get("items", [])
+            style = block.get("style", "bullet")
+            if items:
+                prefix = "- " if style == "bullet" else ""
+                lines = []
+                for i, item in enumerate(items):
+                    if style == "number":
+                        lines.append(f"{i+1}. {item}")
+                    else:
+                        lines.append(f"{prefix}{item}")
+                doc.add_text(
+                    "\n".join(lines),
+                    font_family=font_family,
+                    font_size_code=font_size
+                )
+
+        elif block_type == "divider":
+            doc.add_horizontal_line(layout=divider_layout)
+
+        elif block_type == "image_placeholder":
+            if image_idx < len(image_list):
+                img = image_list[image_idx]
+                doc.add_image(
+                    src=img.get("src", ""),
+                    path=img.get("path", ""),
+                    domain=img.get("domain", "https://blogfiles.pstatic.net"),
+                    width=img.get("width", 500),
+                    height=img.get("height", 500),
+                    original_width=img.get("original_width", 960),
+                    original_height=img.get("original_height", 960),
+                    file_name=img.get("file_name", "image.jpeg"),
+                    file_size=img.get("file_size", 0),
+                    represent=(image_idx == 0),
+                )
+                image_idx += 1
+
+    return doc

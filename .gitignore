@@ -69,3 +69,9 @@ geckodriver
 .bashrc
 .profile
 .gitconfig
+
+# Database & temp files
+*.db
+captured_payload.txt
+nul
+naver_editor_structure.html

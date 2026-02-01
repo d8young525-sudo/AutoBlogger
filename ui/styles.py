@@ -243,13 +243,17 @@ def get_app_stylesheet() -> str:
         min-height: 22px;
     }}
 
+    QComboBox:hover {{
+        border: 1px solid {BORDER_MEDIUM};
+    }}
+
     QComboBox:focus {{
         border: 1px solid {PRIMARY};
     }}
 
     QComboBox::drop-down {{
         subcontrol-origin: padding;
-        subcontrol-position: center right;
+        subcontrol-position: top right;
         width: 28px;
         border-left: 1px solid {BORDER_LIGHT};
         border-top-right-radius: 6px;
@@ -258,15 +262,11 @@ def get_app_stylesheet() -> str:
     }}
 
     QComboBox::down-arrow {{
-        width: 0;
-        height: 0;
+        width: 0px;
+        height: 0px;
         border-left: 5px solid transparent;
         border-right: 5px solid transparent;
-        border-top: 6px solid {PRIMARY};
-    }}
-    
-    QComboBox:hover::down-arrow {{
-        border-top-color: {PRIMARY_DARK};
+        border-top: 6px solid {TEXT_SECONDARY};
     }}
 
     QComboBox QAbstractItemView {{
@@ -382,35 +382,71 @@ def get_app_stylesheet() -> str:
     QRadioButton, QCheckBox {{
         spacing: 8px;
         color: {TEXT_PRIMARY};
+        padding: 4px;
+        font-size: 13px;
     }}
 
-    QRadioButton::indicator, QCheckBox::indicator {{
-        width: 16px;
-        height: 16px;
+    QRadioButton:hover, QCheckBox:hover {{
+        color: {PRIMARY_DARK};
     }}
 
-    QRadioButton::indicator:checked {{
-        background-color: {PRIMARY};
-        border: 2px solid {PRIMARY};
-        border-radius: 9px;
-    }}
-
-    QRadioButton::indicator:unchecked {{
-        background-color: {BG_CARD};
+    /* Checkbox indicator */
+    QCheckBox::indicator {{
+        width: 18px;
+        height: 18px;
         border: 2px solid {BORDER_MEDIUM};
-        border-radius: 9px;
+        border-radius: 4px;
+        background-color: {BG_INPUT};
+    }}
+
+    QCheckBox::indicator:hover {{
+        border-color: {PRIMARY};
+        background-color: {BG_SIDEBAR};
     }}
 
     QCheckBox::indicator:checked {{
+        border-color: {PRIMARY};
         background-color: {PRIMARY};
-        border: 2px solid {PRIMARY};
-        border-radius: 3px;
+        image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3.5 8.5l3 3 6-6' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
     }}
 
-    QCheckBox::indicator:unchecked {{
-        background-color: {BG_CARD};
+    QCheckBox::indicator:checked:hover {{
+        border-color: {PRIMARY_DARK};
+        background-color: {PRIMARY_DARK};
+    }}
+
+    QCheckBox::indicator:disabled {{
+        border-color: #D0D0D0;
+        background-color: #EEEEEE;
+    }}
+
+    /* Radio button indicator */
+    QRadioButton::indicator {{
+        width: 18px;
+        height: 18px;
         border: 2px solid {BORDER_MEDIUM};
-        border-radius: 3px;
+        border-radius: 10px;
+        background-color: {BG_INPUT};
+    }}
+
+    QRadioButton::indicator:hover {{
+        border-color: {PRIMARY};
+        background-color: {BG_SIDEBAR};
+    }}
+
+    QRadioButton::indicator:checked {{
+        border: 2px solid {PRIMARY};
+        background-color: {BG_CARD};
+        image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'><circle cx='9' cy='9' r='5' fill='{PRIMARY}'/></svg>");
+    }}
+
+    QRadioButton::indicator:checked:hover {{
+        border-color: {PRIMARY_DARK};
+    }}
+
+    QRadioButton::indicator:disabled {{
+        border-color: #D0D0D0;
+        background-color: #EEEEEE;
     }}
 
     /* ============================================ */
@@ -467,6 +503,138 @@ def get_app_stylesheet() -> str:
         border: none;
         padding: 6px 10px;
         border-radius: 4px;
+        font-size: 12px;
+    }}
+
+    /* ============================================ */
+    /* Custom Object Name Styles                    */
+    /* ============================================ */
+
+    /* Section card frame */
+    QFrame[objectName="sectionCard"] {{
+        background-color: {BG_CARD};
+        border: 1px solid {BORDER_LIGHT};
+        border-radius: 10px;
+    }}
+
+    /* Section header label */
+    QLabel[objectName="sectionHeader"] {{
+        font-size: 15px;
+        font-weight: bold;
+        color: {PRIMARY_DARK};
+        border: none;
+        padding: 0;
+        background: transparent;
+    }}
+
+    /* Section divider line */
+    QFrame[objectName="sectionDivider"] {{
+        background-color: {BORDER_LIGHT};
+        border: none;
+    }}
+
+    /* Card toggle - selected */
+    QFrame[objectName="cardSelected"] {{
+        border: 2px solid {PRIMARY};
+        border-radius: 8px;
+        background-color: {BG_SIDEBAR};
+        padding: 10px;
+    }}
+
+    /* Card toggle - unselected */
+    QFrame[objectName="cardUnselected"] {{
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        background-color: #fafafa;
+        padding: 10px;
+    }}
+
+    /* Topic radio button (card style) */
+    QRadioButton[objectName="topicRadio"] {{
+        background-color: {BG_CARD};
+        border: 1px solid {BORDER_LIGHT};
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 3px 0;
+        font-size: 13px;
+        color: {TEXT_PRIMARY};
+    }}
+
+    QRadioButton[objectName="topicRadio"]:hover {{
+        background-color: #FFF8F6;
+        border-color: {PRIMARY};
+    }}
+
+    QRadioButton[objectName="topicRadio"]:checked {{
+        background-color: {BG_SIDEBAR};
+        border: 2px solid {PRIMARY};
+        color: {PRIMARY_DARK};
+        font-weight: bold;
+    }}
+
+    QRadioButton[objectName="topicRadio"]::indicator {{
+        width: 0px;
+        height: 0px;
+    }}
+
+    /* Muted label (gray hint text) */
+    QLabel[objectName="mutedLabel"] {{
+        color: {TEXT_MUTED};
+        font-size: 12px;
+    }}
+
+    /* Warning label (orange) */
+    QLabel[objectName="warningLabel"] {{
+        color: {WARNING};
+        font-size: 12px;
+    }}
+
+    /* Dialog title */
+    QLabel[objectName="dialogTitle"] {{
+        font-size: 20px;
+        font-weight: bold;
+        color: {PRIMARY};
+        margin: 10px 0;
+    }}
+
+    /* Thumbnail preview */
+    QLabel[objectName="thumbnailPreview"] {{
+        border: 1px dashed #ccc;
+        background-color: #f9f9f9;
+    }}
+
+    /* User info labels */
+    QLabel[objectName="userEmailLabel"] {{
+        color: {TEXT_MUTED};
+        font-weight: bold;
+    }}
+
+    QLabel[objectName="subscriptionGold"] {{
+        color: #D4A853;
+        font-weight: bold;
+        font-size: 12px;
+    }}
+
+    QLabel[objectName="subscriptionNormal"] {{
+        color: {SUCCESS};
+        font-size: 12px;
+    }}
+
+    /* Schedule status */
+    QLabel[objectName="scheduleActive"] {{
+        color: {PRIMARY};
+        font-size: 12px;
+        font-weight: bold;
+    }}
+
+    QLabel[objectName="scheduleInactive"] {{
+        color: {TEXT_MUTED};
+        font-size: 12px;
+    }}
+
+    /* Info link label */
+    QLabel[objectName="infoLabel"] {{
+        color: {INFO};
         font-size: 12px;
     }}
     """

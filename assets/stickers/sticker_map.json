@@ -1,0 +1,1226 @@
+{
+  "version": "1.0",
+  "classified_at": "2026-02-02 01:05:35",
+  "packs": {
+    "cafe_001": {
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/cafe_001/original_preview.png",
+      "stickers": [
+        {
+          "index": 0,
+          "emotions": [
+            "greeting",
+            "happy"
+          ]
+        },
+        {
+          "index": 1,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 2,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 3,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 4,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 5,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 6,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 7,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 8,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 9,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 10,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 11,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 12,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 13,
+          "emotions": [
+            "surprised"
+          ]
+        },
+        {
+          "index": 14,
+          "emotions": [
+            "tired"
+          ]
+        },
+        {
+          "index": 15,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 16,
+          "emotions": [
+            "tired"
+          ]
+        },
+        {
+          "index": 17,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 18,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 19,
+          "emotions": [
+            "excited"
+          ]
+        },
+        {
+          "index": 20,
+          "emotions": [
+            "tired"
+          ]
+        },
+        {
+          "index": 21,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 22,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 23,
+          "emotions": [
+            "goodbye",
+            "tired"
+          ]
+        }
+      ]
+    },
+    "cafe_002": {
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/cafe_002/original_preview.png",
+      "stickers": [
+        {
+          "index": 0,
+          "emotions": [
+            "thinking",
+            "neutral"
+          ]
+        },
+        {
+          "index": 1,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 2,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 3,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 4,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 5,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 6,
+          "emotions": [
+            "surprised",
+            "excited"
+          ]
+        },
+        {
+          "index": 7,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 8,
+          "emotions": [
+            "surprised",
+            "happy"
+          ]
+        },
+        {
+          "index": 9,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 10,
+          "emotions": [
+            "love",
+            "excited"
+          ]
+        },
+        {
+          "index": 11,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 12,
+          "emotions": [
+            "neutral",
+            "greeting"
+          ]
+        },
+        {
+          "index": 13,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 14,
+          "emotions": [
+            "thinking"
+          ]
+        },
+        {
+          "index": 15,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 16,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 17,
+          "emotions": [
+            "sad",
+            "love"
+          ]
+        },
+        {
+          "index": 18,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 19,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 20,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 21,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 22,
+          "emotions": [
+            "surprised",
+            "excited"
+          ]
+        },
+        {
+          "index": 23,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        }
+      ]
+    },
+    "cafe_004": {
+      "sticker_count": 30,
+      "sprite_url": "https://storep-phinf.pstatic.net/cafe_004/original_preview.png",
+      "stickers": [
+        {
+          "index": 0,
+          "emotions": [
+            "greeting",
+            "happy"
+          ]
+        },
+        {
+          "index": 1,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 2,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 3,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 4,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 5,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 6,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 7,
+          "emotions": [
+            "thinking",
+            "sad"
+          ]
+        },
+        {
+          "index": 8,
+          "emotions": [
+            "surprised",
+            "excited"
+          ]
+        },
+        {
+          "index": 9,
+          "emotions": [
+            "happy",
+            "greeting"
+          ]
+        },
+        {
+          "index": 10,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 11,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 12,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 13,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 14,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 15,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 16,
+          "emotions": [
+            "tired",
+            "sad"
+          ]
+        },
+        {
+          "index": 17,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 18,
+          "emotions": [
+            "angry"
+          ]
+        },
+        {
+          "index": 19,
+          "emotions": [
+            "sad",
+            "tired"
+          ]
+        },
+        {
+          "index": 20,
+          "emotions": [
+            "thinking"
+          ]
+        },
+        {
+          "index": 21,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 22,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 23,
+          "emotions": [
+            "surprised"
+          ]
+        },
+        {
+          "index": 24,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 25,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 26,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 27,
+          "emotions": [
+            "goodbye",
+            "happy"
+          ]
+        },
+        {
+          "index": 28,
+          "emotions": [
+            "neutral"
+          ]
+        },
+        {
+          "index": 29,
+          "emotions": [
+            "neutral"
+          ]
+        }
+      ]
+    },
+    "cafe_005": {
+      "sticker_count": 27,
+      "sprite_url": "https://storep-phinf.pstatic.net/cafe_005/original_preview.png",
+      "stickers": [
+        {
+          "index": 0,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 1,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 2,
+          "emotions": [
+            "sad",
+            "tired"
+          ]
+        },
+        {
+          "index": 3,
+          "emotions": [
+            "greeting",
+            "happy"
+          ]
+        },
+        {
+          "index": 4,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 5,
+          "emotions": [
+            "happy",
+            "greeting"
+          ]
+        },
+        {
+          "index": 6,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 7,
+          "emotions": [
+            "sad",
+            "love"
+          ]
+        },
+        {
+          "index": 8,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 9,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 10,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 11,
+          "emotions": [
+            "greeting",
+            "happy"
+          ]
+        },
+        {
+          "index": 12,
+          "emotions": [
+            "greeting",
+            "happy"
+          ]
+        },
+        {
+          "index": 13,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 14,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 15,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 16,
+          "emotions": [
+            "greeting"
+          ]
+        },
+        {
+          "index": 17,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 18,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 19,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 20,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 21,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 22,
+          "emotions": [
+            "love"
+          ]
+        },
+        {
+          "index": 23,
+          "emotions": [
+            "thinking",
+            "neutral"
+          ]
+        },
+        {
+          "index": 24,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 25,
+          "emotions": [
+            "goodbye",
+            "happy"
+          ]
+        },
+        {
+          "index": 26,
+          "emotions": [
+            "neutral"
+          ]
+        }
+      ]
+    },
+    "clip_001": {
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/clip_001/original_preview.png",
+      "stickers": [
+        {
+          "index": 0,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 1,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 2,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 3,
+          "emotions": [
+            "excited",
+            "happy"
+          ]
+        },
+        {
+          "index": 4,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 5,
+          "emotions": [
+            "angry"
+          ]
+        },
+        {
+          "index": 6,
+          "emotions": [
+            "surprised"
+          ]
+        },
+        {
+          "index": 7,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 8,
+          "emotions": [
+            "thinking"
+          ]
+        },
+        {
+          "index": 9,
+          "emotions": [
+            "love"
+          ]
+        },
+        {
+          "index": 10,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 11,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 12,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 13,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 14,
+          "emotions": [
+            "greeting"
+          ]
+        },
+        {
+          "index": 15,
+          "emotions": [
+            "happy",
+            "love"
+          ]
+        },
+        {
+          "index": 16,
+          "emotions": [
+            "tired"
+          ]
+        },
+        {
+          "index": 17,
+          "emotions": [
+            "thinking"
+          ]
+        },
+        {
+          "index": 18,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 19,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 20,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 21,
+          "emotions": [
+            "love",
+            "excited"
+          ]
+        },
+        {
+          "index": 22,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 23,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        }
+      ]
+    },
+    "motion2d_01": {
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/motion2d_01/original_preview.png",
+      "stickers": [
+        {
+          "index": 0,
+          "emotions": [
+            "happy",
+            "love"
+          ]
+        },
+        {
+          "index": 1,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 2,
+          "emotions": [
+            "surprised"
+          ]
+        },
+        {
+          "index": 3,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 4,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 5,
+          "emotions": [
+            "happy",
+            "greeting"
+          ]
+        },
+        {
+          "index": 6,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 7,
+          "emotions": [
+            "happy"
+          ]
+        },
+        {
+          "index": 8,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 9,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 10,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 11,
+          "emotions": [
+            "angry"
+          ]
+        },
+        {
+          "index": 12,
+          "emotions": [
+            "surprised"
+          ]
+        },
+        {
+          "index": 13,
+          "emotions": [
+            "tired",
+            "sad"
+          ]
+        },
+        {
+          "index": 14,
+          "emotions": [
+            "tired"
+          ]
+        },
+        {
+          "index": 15,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 16,
+          "emotions": [
+            "angry"
+          ]
+        },
+        {
+          "index": 17,
+          "emotions": [
+            "neutral"
+          ]
+        },
+        {
+          "index": 18,
+          "emotions": [
+            "thinking"
+          ]
+        },
+        {
+          "index": 19,
+          "emotions": [
+            "thinking"
+          ]
+        },
+        {
+          "index": 20,
+          "emotions": [
+            "surprised",
+            "excited"
+          ]
+        },
+        {
+          "index": 21,
+          "emotions": [
+            "thinking"
+          ]
+        },
+        {
+          "index": 22,
+          "emotions": [
+            "tired"
+          ]
+        },
+        {
+          "index": 23,
+          "emotions": [
+            "happy"
+          ]
+        }
+      ]
+    },
+    "motion3d_02": {
+      "sticker_count": 24,
+      "sprite_url": "https://storep-phinf.pstatic.net/motion3d_02/original_preview.png",
+      "stickers": [
+        {
+          "index": 0,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 1,
+          "emotions": [
+            "angry"
+          ]
+        },
+        {
+          "index": 2,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 3,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 4,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 5,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 6,
+          "emotions": [
+            "surprised"
+          ]
+        },
+        {
+          "index": 7,
+          "emotions": [
+            "thinking",
+            "tired"
+          ]
+        },
+        {
+          "index": 8,
+          "emotions": [
+            "tired",
+            "neutral"
+          ]
+        },
+        {
+          "index": 9,
+          "emotions": [
+            "happy",
+            "tired"
+          ]
+        },
+        {
+          "index": 10,
+          "emotions": [
+            "surprised"
+          ]
+        },
+        {
+          "index": 11,
+          "emotions": [
+            "tired",
+            "sad"
+          ]
+        },
+        {
+          "index": 12,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 13,
+          "emotions": [
+            "sad"
+          ]
+        },
+        {
+          "index": 14,
+          "emotions": [
+            "neutral",
+            "sad"
+          ]
+        },
+        {
+          "index": 15,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 16,
+          "emotions": [
+            "greeting"
+          ]
+        },
+        {
+          "index": 17,
+          "emotions": [
+            "love",
+            "happy"
+          ]
+        },
+        {
+          "index": 18,
+          "emotions": [
+            "tired"
+          ]
+        },
+        {
+          "index": 19,
+          "emotions": [
+            "surprised",
+            "excited"
+          ]
+        },
+        {
+          "index": 20,
+          "emotions": [
+            "happy",
+            "excited"
+          ]
+        },
+        {
+          "index": 21,
+          "emotions": [
+            "happy",
+            "neutral"
+          ]
+        },
+        {
+          "index": 22,
+          "emotions": [
+            "tired"
+          ]
+        },
+        {
+          "index": 23,
+          "emotions": [
+            "angry"
+          ]
+        }
+      ]
+    }
+  }
+}

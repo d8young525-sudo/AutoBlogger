@@ -31,10 +31,8 @@ def run_gui():
         from PySide6.QtCore import Slot, QSettings
         
         from ui.info_tab import InfoTab
-        from ui.settings_tab import SettingsTab
-        from ui.writing_settings_tab import WritingSettingsTab
+        from ui.unified_settings_tab import UnifiedSettingsTab
         from ui.delivery_tab import DeliveryTab
-        from ui.content_manager_tab import ContentManagerTab
         from ui.login_dialog import LoginDialog
         from ui.styles import get_app_stylesheet
         from core.worker import AutomationWorker
@@ -62,9 +60,9 @@ def run_gui():
             # 상단 사용자 정보 바
             user_bar = QHBoxLayout()
             self.lbl_user_email = QLabel("로그인이 필요합니다")
-            self.lbl_user_email.setStyleSheet("color: #888; font-weight: bold;")
+            self.lbl_user_email.setObjectName("userEmailLabel")
             self.lbl_subscription = QLabel("")
-            self.lbl_subscription.setStyleSheet("font-size: 12px;")
+            self.lbl_subscription.setObjectName("mutedLabel")
             
             self.btn_logout = QPushButton("로그아웃")
             self.btn_logout.setObjectName("dangerButton")
@@ -79,30 +77,24 @@ def run_gui():
 
             # 구분선
             line = QLabel()
-            line.setStyleSheet("border-bottom: 1px solid #E0E0E0; margin: 5px 0;")
+            line.setObjectName("sectionDivider")
             line.setFixedHeight(2)
             layout.addWidget(line)
 
             # Tab widget
             self.tabs = QTabWidget()
             
-            # 글쓰기 환경설정 탭 먼저 생성 (다른 탭에서 참조)
-            self.tab_writing_settings = WritingSettingsTab()
-            
-            # 기본 환경설정 탭
-            self.tab_settings = SettingsTab()
-            
-            # info_tab, delivery_tab에 글쓰기 환경설정 탭 연결
-            self.tab_info = InfoTab(writing_settings_tab=self.tab_writing_settings)
-            self.tab_delivery = DeliveryTab(writing_settings_tab=self.tab_writing_settings)
-            self.tab_content_manager = ContentManagerTab()
-            
-            # 탭 추가 (순서 변경: 글쓰기 환경설정을 환경설정 앞에)
+            # 통합 설정 탭 먼저 생성 (다른 탭에서 참조)
+            self.tab_settings = UnifiedSettingsTab()
+
+            # info_tab, delivery_tab에 설정 탭 연결
+            self.tab_info = InfoTab(writing_settings_tab=self.tab_settings)
+            self.tab_delivery = DeliveryTab(writing_settings_tab=self.tab_settings)
+
+            # 탭 3개
             self.tabs.addTab(self.tab_info, "정보성 글쓰기")
             self.tabs.addTab(self.tab_delivery, "출고 후기")
-            self.tabs.addTab(self.tab_content_manager, "컨텐츠 관리")
-            self.tabs.addTab(self.tab_writing_settings, "글쓰기 환경설정")
-            self.tabs.addTab(self.tab_settings, "환경 설정")
+            self.tabs.addTab(self.tab_settings, "설정")
             
             layout.addWidget(self.tabs)
 
@@ -215,15 +207,16 @@ def run_gui():
             if self.user_info:
                 email = self.user_info.get("email", "")
                 self.lbl_user_email.setText(email)
-                self.lbl_user_email.setStyleSheet("color: #FF6B6B; font-weight: bold;")
-                
+
                 is_admin = self.user_info.get("is_admin", False)
                 if is_admin:
                     self.lbl_subscription.setText("관리자")
-                    self.lbl_subscription.setStyleSheet("color: #D4A853; font-weight: bold; font-size: 12px;")
+                    self.lbl_subscription.setObjectName("subscriptionGold")
                 else:
                     self.lbl_subscription.setText("정식 사용자")
-                    self.lbl_subscription.setStyleSheet("color: #27AE60; font-size: 12px;")
+                    self.lbl_subscription.setObjectName("subscriptionNormal")
+                self.lbl_subscription.style().unpolish(self.lbl_subscription)
+                self.lbl_subscription.style().polish(self.lbl_subscription)
                 
                 self.btn_logout.show()
                 
@@ -258,7 +251,7 @@ def run_gui():
             if data.get("action") in ["publish_only", "full"]:
                 if not user_id or not user_pw:
                     self.update_log("❌ 오류: [환경 설정] 탭에서 네이버 ID/PW를 먼저 저장해주세요.")
-                    self.tabs.setCurrentIndex(4)  # 환경 설정 탭으로 이동
+                    self.tabs.setCurrentIndex(2)  # 설정 탭으로 이동
                     return
 
             # 카테고리 정보 가져오기 (글쓰기 환경설정에서)
@@ -267,9 +260,9 @@ def run_gui():
                 # mode에 따라 카테고리 자동 설정
                 mode = data.get("mode", "")
                 if mode == "info":
-                    category = self.tab_writing_settings.get_info_category()
+                    category = self.tab_settings.get_info_category()
                 elif mode == "delivery":
-                    category = self.tab_writing_settings.get_delivery_category()
+                    category = self.tab_settings.get_delivery_category()
             
             settings_dict = {
                 "id": user_id, 

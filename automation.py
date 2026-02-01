@@ -552,79 +552,137 @@ class NaverBlogBot:
             logger.error(f"Failed to write content: {e}")
             return False, f"Write error: {str(e)}"
 
-    def write_content_with_blocks(self, title: str, blocks: list) -> Tuple[bool, str]:
+    def write_content_with_blocks(self, title: str, blocks: list, image_paths: dict = None, naver_style: dict = None) -> Tuple[bool, str]:
         """
-        구조화된 blocks를 사용하여 에디터 서식을 직접 적용하며 작성
-        
+        구조화된 blocks를 블록별로 순차 입력하며 네이버 에디터 서식 적용.
+
         Args:
-            title: 블로그 포스트 제목
-            blocks: 구조화된 블록 리스트
-                [
-                    {"type": "heading", "text": "소제목", "level": 2},
-                    {"type": "paragraph", "text": "본문 내용"},
-                    {"type": "list", "style": "bullet", "items": ["항목1", "항목2"]},
-                    {"type": "divider"},
-                    {"type": "quotation", "text": "인용구"}
-                ]
-        
-        Returns:
-            Tuple of (success, message)
+            title: 글 제목
+            blocks: 블록 리스트
+            image_paths: {block_index: file_path} 이미지 매핑
+            naver_style: 서식 설정
+
+        전략: 블록 단위로 텍스트 입력 → 툴바 서식 적용.
+        서식 적용 실패 시 해당 서식만 건너뛰고 텍스트는 반드시 입력.
+        전체 블록별 입력 실패 시 flat mode로 폴백.
         """
         if not self.driver:
             return False, "Browser not started"
-        
+
         if not blocks:
             return False, "No blocks to write"
-            
+
+        self._naver_style = naver_style or {}
+        self._image_paths = image_paths or {}
+
+        # 스티커 매처 초기화
         try:
-            logger.info(f"Writing content with {len(blocks)} blocks...")
-            
-            # Step 0: 에디터 영역 확인
+            from core.sticker_matcher import StickerMatcher
+            pack_name = self._naver_style.get('sticker', {}).get('packName')
+            self._sticker_matcher = StickerMatcher(pack_name=pack_name)
+        except ImportError:
+            self._sticker_matcher = None
+
+        try:
+            logger.info(f"Writing content with {len(blocks)} blocks (styled mode), {len(self._image_paths)} images...")
+
             self._ensure_in_editor()
-            
+
             # Step 1: 제목 입력
             success, msg = self._write_title(title)
             if not success:
                 return False, msg
-            
-            # Step 2: 본문 영역 클릭하여 커서 위치
+
+            # Step 2: 본문 영역 클릭
             success = self._click_content_area()
             if not success:
                 return False, "Failed to click content area"
-            
-            # Step 3: 블록별로 처리
-            for i, block in enumerate(blocks):
-                block_type = block.get("type", "paragraph")
-                logger.info(f"Processing block {i+1}/{len(blocks)}: {block_type}")
-                
-                try:
-                    if block_type == "heading":
+
+            # 스티커 삽입 빈도 계산
+            sticker_cfg = self._naver_style.get('sticker', {})
+            sticker_enabled = sticker_cfg.get('enabled', False)
+            sticker_freq = sticker_cfg.get('frequency', 0)  # 0=off, 1=적게, 2=보통, 3=많이
+            # 빈도별 heading 간격: 적게=3, 보통=2, 많이=1
+            sticker_interval = {1: 3, 2: 2, 3: 1}.get(sticker_freq, 0)
+            heading_count = 0
+
+            # Step 3: 블록별 순차 입력 + 서식 적용
+            try:
+                for i, block in enumerate(blocks):
+                    btype = block.get("type", "paragraph")
+
+                    if btype == "heading":
+                        heading_count += 1
                         self._write_heading_block(block)
-                    elif block_type == "paragraph":
+                        # 스티커 삽입 (heading 뒤, 빈도에 따라, 문맥 매칭)
+                        if sticker_enabled and sticker_interval > 0 and heading_count % sticker_interval == 0:
+                            try:
+                                self._insert_sticker(context_text=block.get("text", ""))
+                            except Exception as e:
+                                logger.warning(f"Sticker insertion failed: {e}")
+                    elif btype == "paragraph":
                         self._write_paragraph_block(block)
-                    elif block_type == "list":
+                    elif btype == "list":
                         self._write_list_block(block)
-                    elif block_type == "divider":
-                        self._write_divider_block()
-                    elif block_type == "quotation":
+                    elif btype == "quotation":
                         self._write_quotation_block(block)
-                    else:
-                        # 알 수 없는 블록 타입은 paragraph로 처리
-                        self._write_paragraph_block(block)
-                    
-                    time.sleep(0.3)  # 블록 간 짧은 대기
-                    
-                except Exception as block_error:
-                    logger.warning(f"Block {i+1} error: {block_error}")
-                    # 블록 하나 실패해도 계속 진행
-                    continue
-            
-            logger.info("Content with blocks written successfully")
-            return True, "Content written with formatting"
-            
+                    elif btype == "divider":
+                        self._write_divider_block()
+                    elif btype == "image_placeholder":
+                        if i in self._image_paths:
+                            try:
+                                self._insert_image_at_cursor(self._image_paths[i])
+                            except Exception as e:
+                                logger.warning(f"Image insertion failed at block {i}: {e}")
+
+                time.sleep(0.5)
+                logger.info(f"Content written: {len(blocks)} blocks in styled mode")
+                return True, "Content written (styled mode)"
+
+            except Exception as e:
+                logger.warning(f"Styled mode failed at block, falling back to flat mode: {e}")
+                return self._write_flat_mode(blocks)
+
         except Exception as e:
             logger.error(f"Failed to write content with blocks: {e}")
             return False, f"Block write error: {str(e)}"
+
+    def _write_flat_mode(self, blocks: list) -> Tuple[bool, str]:
+        """flat mode 폴백: 블록을 텍스트로 조합하여 한 번에 입력"""
+        lines = []
+        for block in blocks:
+            btype = block.get("type", "paragraph")
+            text = block.get("text", "")
+
+            if btype == "heading":
+                lines.append("")
+                lines.append(f"■ {text}")
+                lines.append("")
+            elif btype == "paragraph":
+                if text:
+                    lines.append(text)
+                    lines.append("")
+            elif btype == "list":
+                for item in block.get("items", []):
+                    lines.append(f"  • {item}")
+                lines.append("")
+            elif btype == "quotation":
+                if text:
+                    lines.append("")
+                    lines.append(f"「{text}」")
+                    lines.append("")
+            elif btype == "divider":
+                lines.append("")
+                lines.append("━━━━━━━━━━━━━━━━━━━━")
+                lines.append("")
+
+        content_text = "\n".join(lines).strip()
+        if not self.clipboard_input(content_text):
+            ActionChains(self.driver).send_keys(content_text).perform()
+
+        time.sleep(1)
+        logger.info(f"Content written: {len(content_text)} chars in flat mode (fallback)")
+        return True, "Content written (flat mode fallback)"
 
     def _write_title(self, title: str) -> Tuple[bool, str]:
         """제목 입력"""
@@ -690,61 +748,81 @@ class NaverBlogBot:
     def _write_heading_block(self, block: dict):
         """
         소제목 블록 작성
-        - 텍스트 입력 후 굵게 + 글자 크기 적용
+        - 텍스트 입력 후 naver_style에 따라 서식 적용
+        - 글자 크기, 굵게, 색상 적용 (각각 실패해도 안전하게 진행)
         """
         text = block.get("text", "")
         level = block.get("level", 2)
-        
+
         if not text:
             return
-        
+
+        heading_style = self._naver_style.get('heading', {})
+
         # 새 줄 시작
         ActionChains(self.driver).send_keys(Keys.ENTER).perform()
         time.sleep(0.2)
-        
+
         # 텍스트 입력
         if not self.clipboard_input(text):
             ActionChains(self.driver).send_keys(text).perform()
         time.sleep(0.3)
-        
+
         # 텍스트 전체 선택 (Shift+Home)
         ActionChains(self.driver).key_down(Keys.SHIFT).send_keys(Keys.HOME).key_up(Keys.SHIFT).perform()
         time.sleep(0.2)
-        
-        # 굵게 적용 (Ctrl+B)
-        ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('b').key_up(Keys.CONTROL).perform()
-        time.sleep(0.2)
-        
-        # 글자 크기 변경 (level에 따라)
-        # level 2 = 큰 소제목 (24px), level 3 = 작은 소제목 (19px)
-        self._apply_font_size("24" if level == 2 else "19")
-        
-        # 선택 해제 (End)
+
+        # 굵게 적용 — naver_style 설정에 따라 (기본: True)
+        if heading_style.get('bold', True):
+            ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('b').key_up(Keys.CONTROL).perform()
+            time.sleep(0.2)
+
+        # 글자 크기 변경 시도
+        heading_size = heading_style.get('size', 'se-fs24' if level == 2 else 'se-fs18')
+        # se-fs24 → "24" 추출
+        size_num = heading_size.replace('se-fs', '') if heading_size.startswith('se-fs') else heading_size
+        try:
+            self._apply_font_size(size_num)
+        except Exception:
+            pass
+
+        # 색상 적용 시도
+        heading_color = heading_style.get('color')
+        if heading_color:
+            try:
+                self._apply_font_color(heading_color)
+            except Exception:
+                pass
+
+        # 반드시 선택 해제 + 커서 끝으로
         ActionChains(self.driver).send_keys(Keys.END).perform()
-        
+        time.sleep(0.1)
+
         # 새 줄로 이동
         ActionChains(self.driver).send_keys(Keys.ENTER).perform()
         time.sleep(0.2)
-        
+
         logger.info(f"Heading block written: {text[:20]}...")
 
     def _write_paragraph_block(self, block: dict):
         """
         일반 문단 블록 작성
+        - 서식 적용은 하지 않음 (paragraph에서 font size 변경 시도하면
+          선택 상태 꼬임으로 데이터 누락 발생하므로 제거)
         """
         text = block.get("text", "")
-        
+
         if not text:
             return
-        
+
         # 텍스트 입력
         if not self.clipboard_input(text):
             ActionChains(self.driver).send_keys(text).perform()
-        
+
         # 새 줄로 이동
         ActionChains(self.driver).send_keys(Keys.ENTER).perform()
         time.sleep(0.2)
-        
+
         logger.info(f"Paragraph block written: {len(text)} chars")
 
     def _write_list_block(self, block: dict):
@@ -809,13 +887,20 @@ class NaverBlogBot:
     def _write_divider_block(self):
         """
         구분선 블록 삽입
-        - 에디터의 구분선 버튼 사용
+        - 에디터의 구분선 버튼 사용 + naver_style 구분선 스타일 선택
         """
+        divider_style = self._naver_style.get('divider', {}).get('style', 'line1')
+        # line1~line7 → 드롭다운 인덱스 (0-based)
+        try:
+            divider_idx = int(divider_style.replace('line', '')) - 1
+        except (ValueError, AttributeError):
+            divider_idx = 0
+
         try:
             # 새 줄
             ActionChains(self.driver).send_keys(Keys.ENTER).perform()
             time.sleep(0.2)
-            
+
             # 구분선 버튼 클릭
             divider_btn = WebDriverWait(self.driver, 3).until(
                 EC.element_to_be_clickable((
@@ -825,9 +910,22 @@ class NaverBlogBot:
             )
             divider_btn.click()
             time.sleep(0.5)
-            
-            logger.info("Divider block inserted")
-            
+
+            # 구분선 스타일 선택 (드롭다운이 열려있으면)
+            if divider_idx > 0:
+                try:
+                    style_options = self.driver.find_elements(
+                        By.CSS_SELECTOR,
+                        ".se-popup-list-container li, [class*='horizontal-line-style'] li, .se-popup-content li"
+                    )
+                    if style_options and divider_idx < len(style_options):
+                        style_options[divider_idx].click()
+                        time.sleep(0.3)
+                except Exception:
+                    logger.warning(f"Divider style selection failed for {divider_style}, using default")
+
+            logger.info(f"Divider block inserted (style: {divider_style})")
+
         except (TimeoutException, NoSuchElementException):
             # 구분선 버튼을 못 찾으면 텍스트로 대체
             logger.warning("Divider button not found, using text divider")
@@ -838,20 +936,31 @@ class NaverBlogBot:
     def _write_quotation_block(self, block: dict):
         """
         인용구 블록 작성
-        - 에디터의 인용구 버튼 사용
+        - 에디터의 인용구 버튼 사용 + naver_style 인용구 스타일 선택
+        - 실패 시 텍스트 인용부호로 대체 (데이터 누락 방지)
         """
         text = block.get("text", "")
-        
+
         if not text:
             return
-        
+
+        quote_style = self._naver_style.get('quotation', {}).get('style', 'quotation_line')
+        # 스타일 → 드롭다운 인덱스 매핑 (네이버 에디터 순서)
+        quote_index_map = {
+            "quotation_line": 0,
+            "quotation_bubble": 1,
+            "quotation_corner": 2,
+            "quotation_underline": 3,
+            "quotation_postit": 4
+        }
+
         try:
             # 새 줄
             ActionChains(self.driver).send_keys(Keys.ENTER).perform()
             time.sleep(0.2)
-            
+
             # 인용구 버튼 클릭
-            quote_btn = WebDriverWait(self.driver, 3).until(
+            quote_btn = WebDriverWait(self.driver, 1.5).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR,
                     ".se-insert-quotation-default-toolbar-button, [data-name='quotation']"
@@ -859,18 +968,32 @@ class NaverBlogBot:
             )
             quote_btn.click()
             time.sleep(0.5)
-            
+
+            # 인용구 스타일 선택 (드롭다운이 열려있으면)
+            target_idx = quote_index_map.get(quote_style, 0)
+            if target_idx > 0:
+                try:
+                    style_options = self.driver.find_elements(
+                        By.CSS_SELECTOR,
+                        ".se-popup-list-container li, [class*='quotation-style'] li, .se-popup-content li"
+                    )
+                    if style_options and target_idx < len(style_options):
+                        style_options[target_idx].click()
+                        time.sleep(0.3)
+                except Exception:
+                    logger.warning(f"Quote style selection failed for {quote_style}, using default")
+
             # 인용구 내용 입력
             if not self.clipboard_input(text):
                 ActionChains(self.driver).send_keys(text).perform()
-            
+
             # 인용구 모드 종료 (화살표 아래 + Enter)
             ActionChains(self.driver).send_keys(Keys.ARROW_DOWN).perform()
             time.sleep(0.2)
             ActionChains(self.driver).send_keys(Keys.ENTER).perform()
-            
-            logger.info(f"Quotation block written: {text[:20]}...")
-            
+
+            logger.info(f"Quotation block written: {text[:20]}... (style: {quote_style})")
+
         except (TimeoutException, NoSuchElementException):
             # 인용구 버튼을 못 찾으면 텍스트로 대체
             logger.warning("Quotation button not found, using text quotation")
@@ -881,25 +1004,20 @@ class NaverBlogBot:
 
     def _apply_font_size(self, size: str):
         """
-        글자 크기 적용
-        - 에디터의 글자 크기 드롭다운 사용
-        
-        Args:
-            size: 글자 크기 (예: "15", "19", "24", "32")
+        글자 크기 적용 시도
+        - 실패 시 ESC로 드롭다운 닫고 빠르게 복귀
         """
         try:
-            # 글자 크기 버튼 클릭
-            size_btn = WebDriverWait(self.driver, 3).until(
+            size_btn = WebDriverWait(self.driver, 1.5).until(
                 EC.element_to_be_clickable((
                     By.CSS_SELECTOR,
                     ".se-font-size-code-toolbar-button, [data-name='font-size']"
                 ))
             )
             size_btn.click()
-            time.sleep(0.3)
-            
-            # 크기 선택 (드롭다운에서)
-            size_option = WebDriverWait(self.driver, 2).until(
+            time.sleep(0.2)
+
+            size_option = WebDriverWait(self.driver, 1).until(
                 EC.element_to_be_clickable((
                     By.XPATH,
                     f"//li[contains(@class, 'se-') and contains(text(), '{size}')]"
@@ -907,11 +1025,232 @@ class NaverBlogBot:
             )
             size_option.click()
             time.sleep(0.2)
-            
             logger.info(f"Font size applied: {size}")
-            
+
         except (TimeoutException, NoSuchElementException):
-            logger.warning(f"Font size button not found for size {size}")
+            # 드롭다운이 열렸을 수 있으니 ESC로 닫기
+            try:
+                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+                time.sleep(0.1)
+            except Exception:
+                pass
+            logger.warning(f"Font size apply failed for size {size}, skipped")
+
+    def _apply_font_color(self, color: str):
+        """
+        글자 색상 적용 시도
+        - 색상 툴바 버튼 클릭 → 색상 선택
+        - 실패 시 무시
+        """
+        try:
+            color_btn = WebDriverWait(self.driver, 1.5).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR,
+                    ".se-toolbar-button-font-color, [data-name='font-color'], .se-font-color-toolbar-button"
+                ))
+            )
+            color_btn.click()
+            time.sleep(0.3)
+
+            # 색상 팔레트에서 해당 색상 버튼 찾기
+            color_lower = color.lower()
+            color_option = WebDriverWait(self.driver, 1).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR,
+                    f"button[data-color='{color_lower}'], "
+                    f"[style*='background-color: {color_lower}'], "
+                    f"[style*='background: {color_lower}'], "
+                    f"button[data-value='{color_lower}']"
+                ))
+            )
+            color_option.click()
+            time.sleep(0.2)
+            logger.info(f"Font color applied: {color}")
+
+        except (TimeoutException, NoSuchElementException):
+            try:
+                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+                time.sleep(0.1)
+            except Exception:
+                pass
+            logger.warning(f"Font color apply failed for {color}, skipped")
+
+    def _insert_sticker(self, context_text: str = ""):
+        """
+        네이버 에디터 스티커 삽입 (DOM 툴바 조작 + 문맥 매칭)
+
+        sticker_map.json이 있으면 텍스트 문맥에 맞는 스티커 선택,
+        없으면 랜덤 선택.
+
+        Args:
+            context_text: 문맥 매칭용 텍스트 (heading이나 paragraph)
+        """
+        try:
+            # 스티커 툴바 버튼 클릭
+            sticker_btn = WebDriverWait(self.driver, 2).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR,
+                    "button.se-sticker-toolbar-button, "
+                    "button[data-name='sticker']"
+                ))
+            )
+            sticker_btn.click()
+            time.sleep(1)
+
+            # 문맥 매칭으로 스티커 선택
+            target_index = None
+            target_pack = None
+
+            if hasattr(self, '_sticker_matcher') and self._sticker_matcher and self._sticker_matcher.is_available():
+                match = self._sticker_matcher.match_sticker(context_text)
+                if match:
+                    target_pack, target_index = match
+
+            # 팩 탭 선택 (target_pack이 있으면 해당 팩으로 이동)
+            if target_pack:
+                try:
+                    tabs = self.driver.find_elements(By.CSS_SELECTOR,
+                        "ul.se-sidebar-list li.se-sidebar-item button")
+                    for tab in tabs:
+                        try:
+                            blind = tab.find_element(By.CSS_SELECTOR, "span.se-blind")
+                            if target_pack in blind.text:
+                                tab.click()
+                                time.sleep(0.5)
+                                break
+                        except NoSuchElementException:
+                            continue
+                except Exception:
+                    pass
+
+            # 스티커 버튼 목록에서 선택
+            sticker_buttons = WebDriverWait(self.driver, 2).until(
+                EC.presence_of_all_elements_located((
+                    By.CSS_SELECTOR,
+                    "button.se-sidebar-element-sticker"
+                ))
+            )
+
+            if sticker_buttons:
+                import random
+                if target_index is not None:
+                    # data-index로 매칭
+                    clicked = False
+                    for btn in sticker_buttons:
+                        if btn.get_attribute("data-index") == str(target_index):
+                            btn.click()
+                            clicked = True
+                            break
+                    if not clicked:
+                        sticker_buttons[random.randint(0, len(sticker_buttons) - 1)].click()
+                else:
+                    sticker_buttons[random.randint(0, min(len(sticker_buttons) - 1, 11))].click()
+
+                time.sleep(0.5)
+                logger.info(f"Sticker inserted (pack: {target_pack}, idx: {target_index})")
+            else:
+                logger.warning("No sticker buttons found in picker")
+                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+
+        except (TimeoutException, NoSuchElementException):
+            logger.warning("Sticker toolbar button not found, skipping sticker")
+            try:
+                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+            except Exception:
+                pass
+
+    def _insert_image_at_cursor(self, image_path: str) -> bool:
+        """
+        현재 커서 위치에 이미지를 삽입 (본문 내 이미지 자동 배치용)
+
+        네이버 에디터의 사진 추가 툴바 버튼을 클릭하고 file input에 경로를 전달합니다.
+
+        Args:
+            image_path: 삽입할 이미지 파일 경로
+
+        Returns:
+            성공 여부
+        """
+        if not image_path or not os.path.exists(image_path):
+            logger.warning(f"Image file not found for insertion: {image_path}")
+            return False
+
+        try:
+            logger.info(f"Inserting image at cursor: {image_path}")
+
+            # 에디터 툴바의 사진 버튼 클릭
+            try:
+                photo_btn = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((
+                        By.CSS_SELECTOR,
+                        "button.se-image-toolbar-button, "
+                        "button[data-name='image'], "
+                        "button.se-toolbar-button-image, "
+                        ".se-toolbar-item-image button"
+                    ))
+                )
+                photo_btn.click()
+                logger.info("Clicked image toolbar button")
+            except TimeoutException:
+                # JavaScript로 사진 버튼 클릭 시도
+                self.driver.execute_script("""
+                    var btn = document.querySelector(
+                        'button.se-image-toolbar-button, ' +
+                        'button[data-name="image"], ' +
+                        'button.se-toolbar-button-image, ' +
+                        '.se-toolbar-item-image button'
+                    );
+                    if (btn) btn.click();
+                """)
+                logger.info("Clicked image toolbar button via JS")
+
+            time.sleep(1)
+
+            # file input에 경로 전달
+            try:
+                file_input = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.ID, "hidden-file"))
+                )
+                file_input.send_keys(image_path)
+                logger.info(f"Image file path sent: {image_path}")
+            except TimeoutException:
+                file_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
+                if file_inputs:
+                    file_inputs[-1].send_keys(image_path)
+                    logger.info("Image file path sent to last file input")
+                else:
+                    logger.warning("No file input found for image insertion")
+                    return False
+
+            # 이미지 업로드 완료 대기
+            time.sleep(3)
+
+            # 업로드 확인 (이미지 컴포넌트가 에디터에 나타나는지)
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((
+                        By.CSS_SELECTOR,
+                        ".se-image-resource"
+                    ))
+                )
+                logger.info("Image inserted successfully")
+            except TimeoutException:
+                logger.warning("Could not verify image insertion, continuing...")
+
+            # 이미지 아래로 커서 이동 (Enter)
+            from selenium.webdriver.common.keys import Keys
+            content_area = self.driver.find_element(
+                By.CSS_SELECTOR, ".se-component-content"
+            )
+            content_area.send_keys(Keys.END)
+            content_area.send_keys(Keys.ENTER)
+            time.sleep(0.5)
+
+            return True
+
+        except Exception as e:
+            logger.warning(f"Failed to insert image at cursor: {e}")
+            return False
 
     def upload_cover_image(self, image_path: str) -> Tuple[bool, str]:
         """

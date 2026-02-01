@@ -3,14 +3,17 @@ Automation Worker Module
 백그라운드 작업 처리를 위한 Worker Thread
 """
 import logging
-from typing import Dict, Any, Optional
+import tempfile
+import os
+from typing import Dict, Any, Optional, List
 
 import requests
 from PySide6.QtCore import QThread, Signal
 
 from automation import NaverBlogBot
 from config import Config
-from core.content_converter import text_to_naver_document, ContentConverter
+from core.content_converter import ContentConverter
+from core.image_generator import GeminiImageGenerator
 from core.post_history import add_post
 
 logger = logging.getLogger(__name__)
@@ -78,6 +81,9 @@ class AutomationWorker(QThread):
                 self.data['title'] = res_data.get('title', '')
                 # API 응답 키가 content 또는 content_text일 수 있음
                 self.data['content'] = res_data.get('content', '') or res_data.get('content_text', '')
+                # API 응답의 blocks 직접 전달
+                if 'blocks' in res_data:
+                    self.data['blocks'] = res_data['blocks']
                 
                 if not self.data['content']:
                     self.log_signal.emit("❌ 생성된 본문 내용이 없습니다.")
@@ -141,7 +147,9 @@ class AutomationWorker(QThread):
                 맺음말: {self.settings.get('outro', '')}
             """,
             "style_options": str(self.data.get('style_options', {})),
-            "naver_style": naver_style
+            "naver_style": naver_style,
+            "structure_style": self.data.get('post_structure', 'default'),
+            "structure_params": self.data.get('structure_params', {})
         }
 
         try:
@@ -234,84 +242,148 @@ class AutomationWorker(QThread):
             if self._is_cancelled:
                 return
             
-            # Step 3.5: 태그 입력
-            tags = self.data.get('tags', '')
-            if tags:
-                self.log_signal.emit(f"태그 입력 중...")
-                success, msg = self.bot.input_tags(tags)
-                if success:
-                    self.log_signal.emit(f"태그 입력 완료: {msg}")
-                else:
-                    self.log_signal.emit(f"태그 입력 실패 (계속 진행): {msg}")
-            
-            # Step 4: Build JSON document and publish via API
-            self.log_signal.emit("JSON 문서 생성 중...")
-            self.progress_signal.emit(85)
-            
-            try:
-                naver_doc = text_to_naver_document(content, title)
-                self.log_signal.emit(
-                    f"JSON 문서 생성 완료 ({len(naver_doc.components)} components)"
-                )
-            except Exception as e:
-                self.log_signal.emit(f"JSON 문서 생성 실패: {e}, DOM 방식으로 전환...")
-                # Fallback to DOM manipulation with blocks
+            # Step 3.5: 본문 이미지 생성
+            image_paths = {}
+            naver_style = self.data.get('naver_style', {})
+            blocks = self.data.get('blocks', None)
+            if not blocks:
                 blocks = self._text_to_blocks(content)
-                if blocks:
-                    success, msg = self.bot.write_content_with_blocks(title, blocks)
-                else:
-                    success, msg = self.bot.write_content(title, content)
-                if not success:
-                    self.log_signal.emit(f"작성 실패: {msg}")
-                    return
-                if self._is_cancelled:
-                    return
-                success, msg = self.bot.publish_post(category=category)
-                if success:
-                    self.log_signal.emit("발행 완료! (DOM 방식)")
-                    self._record_publish(title, content, category)
-                else:
-                    self.log_signal.emit(f"발행 실패: {msg}")
+
+            if blocks:
+                image_paths = self._generate_content_images(blocks)
+
+            if self._is_cancelled:
+                self._cleanup_temp_images(image_paths)
+                return
+
+            # Step 4: 콘텐츠 작성 (DOM 방식 - blocks 기반 서식 적용)
+            self.log_signal.emit("콘텐츠 작성 중 (서식 적용)...")
+            self.progress_signal.emit(85)
+
+            if blocks:
+                self.log_signal.emit(f"블록 변환 완료 ({len(blocks)}개 블록)")
+                success, msg = self.bot.write_content_with_blocks(title, blocks, image_paths=image_paths, naver_style=naver_style)
+            else:
+                self.log_signal.emit("블록 변환 실패, 텍스트 방식으로 작성...")
+                success, msg = self.bot.write_content(title, content)
+            
+            if not success:
+                self.log_signal.emit(f"작성 실패: {msg}")
                 return
             
             if self._is_cancelled:
                 return
             
-            # Step 5: Publish via JSON API
-            self.log_signal.emit("JSON API로 발행 중...")
+            # Step 4.5: 태그 입력
+            tags = self.data.get('tags', '')
+            if tags:
+                self.log_signal.emit("태그 입력 중...")
+                tag_success, tag_msg = self.bot.input_tags(tags)
+                if not tag_success:
+                    self.log_signal.emit(f"태그 입력 실패 (계속 진행): {tag_msg}")
+            
+            if self._is_cancelled:
+                return
+            
+            # Step 5: 발행
+            self.log_signal.emit("발행 중...")
             self.progress_signal.emit(95)
             
-            success, msg = self.bot.write_and_publish_via_json(naver_doc, category=category)
+            success, msg = self.bot.publish_post(category=category)
             if success:
-                self.log_signal.emit("발행 완료!")
+                self.log_signal.emit("✅ 발행 완료!")
                 self.progress_signal.emit(100)
                 self._record_publish(title, content, category)
             else:
-                self.log_signal.emit(f"JSON 발행 실패: {msg}")
-                self.log_signal.emit("DOM 방식으로 재시도 (서식 적용)...")
-                # Fallback to DOM manipulation with blocks
-                blocks = self._text_to_blocks(content)
-                if blocks:
-                    success, msg = self.bot.write_content_with_blocks(title, blocks)
-                else:
-                    # 블록 변환 실패 시 단순 텍스트
-                    success, msg = self.bot.write_content(title, content)
-                if success and not self._is_cancelled:
-                    success, msg = self.bot.publish_post(category=category)
-                if success:
-                    self.log_signal.emit("발행 완료! (DOM fallback)")
-                    self._record_publish(title, content, category)
-                else:
-                    self.log_signal.emit(f"발행 실패: {msg}")
+                self.log_signal.emit(f"❌ 발행 실패: {msg}")
                 
         except Exception as e:
             self.log_signal.emit(f"치명적 오류: {str(e)}")
             logger.error(f"Publishing failed: {e}")
         finally:
-            # Cleanup - close browser
+            # Cleanup - close browser and temp images
+            self._cleanup_temp_images(image_paths)
             if self.bot:
                 self.bot.close()
                 self.bot = None
+
+    def _generate_content_images(self, blocks: list) -> dict:
+        """
+        blocks에서 image_placeholder를 찾아 최대 3개 이미지 생성.
+        Returns: {block_index: file_path} 매핑
+        """
+        structure_params = self.data.get('structure_params', {})
+        max_images = min(structure_params.get('image_count', 2), 3)
+
+        if max_images <= 0:
+            return {}
+
+        # image_placeholder 블록 인덱스 수집
+        placeholders = []
+        for i, block in enumerate(blocks):
+            if block.get('type') == 'image_placeholder':
+                placeholders.append((i, block.get('description', '')))
+
+        if not placeholders:
+            return {}
+
+        # 균등 간격으로 max_images개 선택
+        if len(placeholders) <= max_images:
+            selected = placeholders
+        else:
+            step = len(placeholders) / max_images
+            selected = [placeholders[int(step * j)] for j in range(max_images)]
+
+        self.log_signal.emit(f"🎨 본문 이미지 생성 중 ({len(selected)}개)...")
+
+        generator = GeminiImageGenerator()
+        if not generator.is_available():
+            self.log_signal.emit("⚠️ 이미지 생성 API 키 미설정, 이미지 생략")
+            return {}
+
+        image_paths = {}
+        topic = self.data.get('topic', '')
+
+        for idx, (block_idx, description) in enumerate(selected):
+            if self._is_cancelled:
+                break
+
+            prompt = f"{topic} - {description}" if description else topic
+            self.log_signal.emit(f"  이미지 {idx + 1}/{len(selected)} 생성 중...")
+
+            try:
+                tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+                tmp.close()
+
+                success, msg, img_bytes = generator.generate_blog_image(
+                    topic=prompt,
+                    style="본문 삽화",
+                    output_path=tmp.name,
+                    aspect_ratio="16:9"
+                )
+
+                if success and img_bytes:
+                    image_paths[block_idx] = tmp.name
+                    logger.info(f"Content image {idx + 1} generated: {tmp.name}")
+                else:
+                    os.unlink(tmp.name)
+                    logger.warning(f"Content image {idx + 1} failed: {msg}")
+
+            except Exception as e:
+                logger.error(f"Content image generation error: {e}")
+
+        if image_paths:
+            self.log_signal.emit(f"✅ 본문 이미지 {len(image_paths)}개 생성 완료")
+        return image_paths
+
+    def _cleanup_temp_images(self, image_paths: dict):
+        """임시 이미지 파일 정리"""
+        for path in image_paths.values():
+            try:
+                if os.path.exists(path):
+                    os.unlink(path)
+            except Exception:
+                pass
 
     def _text_to_blocks(self, content: str) -> list:
         """

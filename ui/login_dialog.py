@@ -48,7 +48,7 @@ class LoginDialog(QDialog):
         
         # 앱 로고/타이틀
         title_label = QLabel("Auto Blogger Pro")
-        title_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #FF6B6B; margin: 10px 0;")
+        title_label.setObjectName("dialogTitle")
         title_label.setAlignment(Qt.AlignCenter if hasattr(Qt, 'AlignCenter') else 0x0004)
         layout.addWidget(title_label)
         
@@ -78,7 +78,7 @@ class LoginDialog(QDialog):
         
         # 마지막 로그인 정보
         self.login_status = QLabel("")
-        self.login_status.setStyleSheet("color: #888; font-size: 12px;")
+        self.login_status.setObjectName("mutedLabel")
         login_layout.addWidget(self.login_status)
         
         # 비밀번호 찾기 (인라인)
@@ -94,7 +94,7 @@ class LoginDialog(QDialog):
         reset_form_layout.setContentsMargins(0, 5, 0, 0)
         
         reset_info = QLabel("가입한 이메일로 비밀번호 재설정 링크를 보내드립니다.")
-        reset_info.setStyleSheet("color: #888; font-size: 12px;")
+        reset_info.setObjectName("mutedLabel")
         reset_form_layout.addWidget(reset_info)
         
         reset_email_row = QHBoxLayout()
@@ -139,12 +139,12 @@ class LoginDialog(QDialog):
         register_layout.addWidget(self.btn_register)
         
         register_info = QLabel("회원가입 후 관리자 승인이 필요합니다.")
-        register_info.setStyleSheet("color: #E67E22; font-size: 12px;")
+        register_info.setObjectName("warningLabel")
         register_layout.addWidget(register_info)
         
         # 관리자 연락처 안내
         contact_info = QLabel(f"승인 문의: <a href='{ADMIN_CONTACT}'>오픈카톡</a>")
-        contact_info.setStyleSheet("color: #3498DB; font-size: 12px;")
+        contact_info.setObjectName("infoLabel")
         contact_info.setOpenExternalLinks(True)
         register_layout.addWidget(contact_info)
         
