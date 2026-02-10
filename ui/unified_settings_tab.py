@@ -3,7 +3,6 @@
 기존 settings_tab.py + writing_settings_tab.py 통합
 """
 import os
-import csv
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout,
     QLineEdit, QTextEdit, QPushButton, QMessageBox,
@@ -12,6 +11,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtGui import QPixmap
+
+from ui.styles import GREEN_BUTTON_STYLE, NEUTRAL_BUTTON_STYLE
 
 
 class UnifiedSettingsTab(QWidget):
@@ -47,12 +48,9 @@ class UnifiedSettingsTab(QWidget):
         # ========== 5. 카테고리 설정 ==========
         self._create_category_section(layout)
 
-        # ========== 6. 데이터 관리 ==========
-        self._create_data_section(layout)
-
         # ========== 저장 버튼 ==========
         self.btn_save = QPushButton("설정 저장")
-        self.btn_save.setObjectName("primaryButton")
+        self.btn_save.setStyleSheet(GREEN_BUTTON_STYLE)
         self.btn_save.clicked.connect(self.save_settings)
         layout.addWidget(self.btn_save)
 
@@ -65,12 +63,55 @@ class UnifiedSettingsTab(QWidget):
         self.load_settings()
 
     # ============================================================
+    # Helpers
+    # ============================================================
+
+    def _form_label(self, text: str) -> QLabel:
+        """고정 너비 폼 라벨 생성 (정렬 통일)"""
+        lbl = QLabel(text)
+        lbl.setMinimumWidth(120)
+        lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        return lbl
+
+    def _make_form(self) -> QFormLayout:
+        """통일된 QFormLayout 생성"""
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form.setHorizontalSpacing(16)
+        form.setVerticalSpacing(12)
+        return form
+
+    def _label_above(self, text: str) -> QLabel:
+        """label-above 패턴용 라벨"""
+        lbl = QLabel(text)
+        lbl.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
+        return lbl
+
+    def _two_col(self, l1, w1, l2, w2):
+        """2열 그리드: 라벨 위 + 위젯"""
+        row = QHBoxLayout()
+        row.setSpacing(16)
+        for label, widget in [(l1, w1), (l2, w2)]:
+            col = QVBoxLayout()
+            col.setSpacing(4)
+            col.addWidget(self._label_above(label))
+            col.addWidget(widget)
+            row.addLayout(col, 1)
+        return row
+
+    # ============================================================
     # Section builders
     # ============================================================
 
     def _create_account_section(self, layout):
         group = QGroupBox("계정 설정")
-        form = QFormLayout()
+        vlayout = QVBoxLayout()
+        vlayout.setSpacing(12)
+
+        desc = QLabel("네이버 계정은 블로그 자동 발행에만 사용됩니다.")
+        desc.setEnabled(False)
+        vlayout.addWidget(desc)
 
         self.input_id = QLineEdit()
         self.input_id.setPlaceholderText("네이버 아이디")
@@ -78,23 +119,20 @@ class UnifiedSettingsTab(QWidget):
         self.input_pw.setEchoMode(QLineEdit.Password)
         self.input_pw.setPlaceholderText("네이버 비밀번호")
 
-        form.addRow("네이버 ID:", self.input_id)
-        form.addRow("네이버 PW:", self.input_pw)
+        vlayout.addWidget(self._label_above("네이버 ID"))
+        vlayout.addWidget(self.input_id)
+        vlayout.addWidget(self._label_above("네이버 PW"))
+        vlayout.addWidget(self.input_pw)
 
-        notice = QLabel("네이버 계정은 블로그 자동 발행에만 사용됩니다.")
-        notice.setObjectName("mutedLabel")
-        form.addRow("", notice)
-
-        group.setLayout(form)
+        group.setLayout(vlayout)
         layout.addWidget(group)
 
     def _create_style_section(self, layout):
         group = QGroupBox("글쓰기 기본 스타일")
         vlayout = QVBoxLayout()
+        vlayout.setSpacing(16)
 
-        # 글 말투
-        form = QFormLayout()
-
+        # 글 말투 + 기본 분량: 2열 배치
         self.combo_default_tone = QComboBox()
         self.combo_default_tone.addItems([
             "친근한 이웃 (해요체)",
@@ -103,7 +141,6 @@ class UnifiedSettingsTab(QWidget):
             "감성적인 에세이 스타일",
             "냉철한 팩트 전달/뉴스 스타일"
         ])
-        form.addRow("글 말투:", self.combo_default_tone)
 
         self.combo_default_length = QComboBox()
         self.combo_default_length.addItems([
@@ -111,9 +148,11 @@ class UnifiedSettingsTab(QWidget):
             "길게 (2,000자)",
             "아주 길게 (2,500자)"
         ])
-        form.addRow("기본 분량:", self.combo_default_length)
 
-        vlayout.addLayout(form)
+        vlayout.addLayout(self._two_col(
+            "글 문투", self.combo_default_tone,
+            "기본 분량", self.combo_default_length
+        ))
 
         # 고정 인사말
         vlayout.addWidget(QLabel("고정 인사말 (글 시작 부분):"))
@@ -135,17 +174,17 @@ class UnifiedSettingsTab(QWidget):
 
         self.lbl_image_preview = QLabel()
         self.lbl_image_preview.setFixedSize(150, 90)
-        self.lbl_image_preview.setObjectName("thumbnailPreview")
         self.lbl_image_preview.setAlignment(Qt.AlignCenter)
         image_row.addWidget(self.lbl_image_preview)
 
         btn_col = QVBoxLayout()
         self.btn_select_image = QPushButton("이미지 선택")
+        self.btn_select_image.setStyleSheet(NEUTRAL_BUTTON_STYLE)
         self.btn_select_image.clicked.connect(self.select_outro_image)
         btn_col.addWidget(self.btn_select_image)
 
         self.btn_clear_image = QPushButton("삭제")
-        self.btn_clear_image.setObjectName("dangerButton")
+        self.btn_clear_image.setStyleSheet(NEUTRAL_BUTTON_STYLE)
         self.btn_clear_image.clicked.connect(self.clear_outro_image)
         btn_col.addWidget(self.btn_clear_image)
         btn_col.addStretch()
@@ -155,7 +194,6 @@ class UnifiedSettingsTab(QWidget):
         vlayout.addLayout(image_row)
 
         self.lbl_image_path = QLabel("")
-        self.lbl_image_path.setObjectName("mutedLabel")
         vlayout.addWidget(self.lbl_image_path)
 
         group.setLayout(vlayout)
@@ -164,48 +202,75 @@ class UnifiedSettingsTab(QWidget):
     def _create_structure_section(self, layout):
         group = QGroupBox("포스팅 구조")
         vlayout = QVBoxLayout()
+        vlayout.setSpacing(12)
 
-        desc = QLabel("포스팅 구조 프리셋을 선택하면 세부값이 자동 설정됩니다.\n수동으로 변경할 수도 있습니다.")
-        desc.setObjectName("mutedLabel")
+        # 자동/수동 모드 선택
+        vlayout.addWidget(self._label_above("구조 모드"))
+        mode_row = QHBoxLayout()
+        self.radio_structure_auto = QRadioButton("자동 (권장)")
+        self.radio_structure_auto.setChecked(True)
+        self.radio_structure_auto.setToolTip("AI가 글 흐름에 맞게 자유롭게 구성")
+        self.radio_structure_manual = QRadioButton("수동")
+        self.radio_structure_manual.setToolTip("구조를 직접 지정 (강제 적용)")
+
+        self.structure_mode_group = QButtonGroup()
+        self.structure_mode_group.addButton(self.radio_structure_auto, 0)
+        self.structure_mode_group.addButton(self.radio_structure_manual, 1)
+        self.structure_mode_group.idToggled.connect(self._on_structure_mode_changed)
+
+        mode_row.addWidget(self.radio_structure_auto)
+        mode_row.addWidget(self.radio_structure_manual)
+        mode_row.addStretch()
+        vlayout.addLayout(mode_row)
+
+        # 수동 설정 컨테이너
+        self.manual_structure_widget = QWidget()
+        manual_layout = QVBoxLayout(self.manual_structure_widget)
+        manual_layout.setContentsMargins(0, 10, 0, 0)
+
+        desc = QLabel("수동 모드: AI에게 구조를 강제합니다.")
+        desc.setEnabled(False)
         desc.setWordWrap(True)
-        vlayout.addWidget(desc)
+        manual_layout.addWidget(desc)
 
-        form = QFormLayout()
-
-        self.combo_post_structure = QComboBox()
-        self.combo_post_structure.addItems([
-            "기본 (자유 구조)",
-            "인기 블로그 스타일"
-        ])
-        self.combo_post_structure.currentIndexChanged.connect(self._on_structure_preset_changed)
-        form.addRow("구조 프리셋:", self.combo_post_structure)
-
+        # 소제목/인용구/이미지 수: 3열 배치
         self.spin_heading_count = QSpinBox()
         self.spin_heading_count.setRange(3, 6)
         self.spin_heading_count.setValue(4)
-        form.addRow("소제목 개수:", self.spin_heading_count)
+        self.spin_heading_count.setToolTip("소제목(h2) 개수를 강제 지정")
 
         self.spin_quotation_count = QSpinBox()
         self.spin_quotation_count.setRange(0, 4)
         self.spin_quotation_count.setValue(2)
-        form.addRow("인용구 개수:", self.spin_quotation_count)
+        self.spin_quotation_count.setToolTip("인용구 블록 개수를 강제 지정")
 
         self.spin_image_count = QSpinBox()
         self.spin_image_count.setRange(0, 3)
         self.spin_image_count.setValue(2)
         self.spin_image_count.setToolTip("본문에 삽입할 AI 생성 이미지 수 (0=없음, 최대 3개)")
-        form.addRow("본문 이미지 수:", self.spin_image_count)
 
+        three_col = QHBoxLayout()
+        three_col.setSpacing(16)
+        for label, widget in [("소제목 개수", self.spin_heading_count),
+                              ("인용구 개수", self.spin_quotation_count),
+                              ("본문 이미지 수", self.spin_image_count)]:
+            col = QVBoxLayout()
+            col.setSpacing(4)
+            col.addWidget(self._label_above(label))
+            col.addWidget(widget)
+            three_col.addLayout(col, 1)
+        manual_layout.addLayout(three_col)
+
+        # 마무리 스타일
+        manual_layout.addWidget(self._label_above("마무리 스타일"))
         self.combo_ending_style = QComboBox()
         self.combo_ending_style.addItems(["요약", "질문 유도", "CTA (행동 유도)"])
-        form.addRow("마무리 스타일:", self.combo_ending_style)
+        manual_layout.addWidget(self.combo_ending_style)
 
-        vlayout.addLayout(form)
+        vlayout.addWidget(self.manual_structure_widget)
 
-        # 썸네일 설정
-        self.chk_auto_thumbnail = QCheckBox("원고 생성 후 자동으로 썸네일 생성")
-        self.chk_auto_thumbnail.setChecked(True)
-        vlayout.addWidget(self.chk_auto_thumbnail)
+        # 초기 상태: 자동 모드이므로 수동 설정 비활성화
+        self.manual_structure_widget.setEnabled(False)
 
         group.setLayout(vlayout)
         layout.addWidget(group)
@@ -213,10 +278,9 @@ class UnifiedSettingsTab(QWidget):
     def _create_naver_style_section(self, layout):
         group = QGroupBox("네이버 에디터 서식 설정")
         vlayout = QVBoxLayout()
+        vlayout.setSpacing(16)
 
-        # 폰트
-        font_form = QFormLayout()
-
+        # 폰트 + 글자 크기: 2열
         self.combo_naver_font = QComboBox()
         self.combo_naver_font.addItems([
             "기본서체 (시스템)", "나눔고딕", "나눔명조", "나눔바른고딕",
@@ -224,64 +288,65 @@ class UnifiedSettingsTab(QWidget):
             "바른히피 (손글씨)", "우리딸손글씨"
         ])
         self.combo_naver_font.setCurrentIndex(1)
-        font_form.addRow("본문 폰트:", self.combo_naver_font)
 
         self.combo_naver_fontsize = QComboBox()
         self.combo_naver_fontsize.addItems([
-            "9pt", "10pt", "11pt", "13pt", "15pt (권장)", "18pt", "24pt", "32pt"
+            "11pt", "13pt", "15pt (권장)", "16pt", "19pt", "24pt", "28pt", "30pt"
         ])
-        self.combo_naver_fontsize.setCurrentIndex(4)
-        font_form.addRow("글자 크기:", self.combo_naver_fontsize)
+        self.combo_naver_fontsize.setCurrentIndex(2)
 
+        vlayout.addLayout(self._two_col(
+            "본문 폰트", self.combo_naver_font,
+            "글자 크기", self.combo_naver_fontsize
+        ))
+
+        # 줄 간격 + 소제목 스타일: 2열
         self.combo_naver_lineheight = QComboBox()
         self.combo_naver_lineheight.addItems(["1.5 (좁게)", "1.8 (기본)", "2.0 (넓게)", "2.5 (매우 넓게)"])
         self.combo_naver_lineheight.setCurrentIndex(1)
-        font_form.addRow("줄 간격:", self.combo_naver_lineheight)
-
-        vlayout.addLayout(font_form)
-
-        # 소제목
-        heading_form = QFormLayout()
 
         self.combo_heading_style = QComboBox()
         self.combo_heading_style.addItems([
-            "18pt", "18pt + Bold", "24pt", "24pt + Bold"
+            "19pt", "19pt + Bold", "24pt", "24pt + Bold"
         ])
-        heading_form.addRow("소제목 스타일:", self.combo_heading_style)
 
+        vlayout.addLayout(self._two_col(
+            "줄 간격", self.combo_naver_lineheight,
+            "소제목 스타일", self.combo_heading_style
+        ))
+
+        # 소제목 색상 + 인용구 모양: 2열
         self.combo_heading_color = QComboBox()
         self.combo_heading_color.addItems([
-            "검정 (기본)", "네이버 그린", "블루", "다크 그레이"
+            "검정 (기본)", "그린 (#54b800)", "블루 (#0078cb)", "레드 (#ff0010)"
         ])
-        heading_form.addRow("소제목 색상:", self.combo_heading_color)
-
-        vlayout.addLayout(heading_form)
-
-        # 인용구 / 구분선
-        misc_form = QFormLayout()
 
         self.combo_quote_style = QComboBox()
         self.combo_quote_style.addItems([
             "왼쪽 세로선", "말풍선", "모서리 꽃음표", "하단 밑줄", "포스트잇"
         ])
-        misc_form.addRow("인용구 모양:", self.combo_quote_style)
 
+        vlayout.addLayout(self._two_col(
+            "소제목 색상", self.combo_heading_color,
+            "인용구 모양", self.combo_quote_style
+        ))
+
+        # 구분선 모양 (1열)
+        vlayout.addWidget(self._label_above("구분선 모양"))
         self.combo_divider_style = QComboBox()
         self.combo_divider_style.addItems([
             "기본 실선", "점선", "이중선", "굵은 실선", "파선", "점선+실선", "장식선"
         ])
-        misc_form.addRow("구분선 모양:", self.combo_divider_style)
+        vlayout.addWidget(self.combo_divider_style)
 
-        vlayout.addLayout(misc_form)
-
-        # 텍스트 서식
+        # 텍스트 서식: 강조
+        vlayout.addWidget(self._label_above("강조"))
         emphasis_row = QHBoxLayout()
         self.chk_bold = QCheckBox("Bold")
         self.chk_bold.setChecked(True)
         self.chk_italic = QCheckBox("Italic")
         self.chk_underline = QCheckBox("Underline")
         self.chk_strikethrough = QCheckBox("취소선")
-        emphasis_row.addWidget(QLabel("강조:"))
         emphasis_row.addWidget(self.chk_bold)
         emphasis_row.addWidget(self.chk_italic)
         emphasis_row.addWidget(self.chk_underline)
@@ -289,19 +354,27 @@ class UnifiedSettingsTab(QWidget):
         emphasis_row.addStretch()
         vlayout.addLayout(emphasis_row)
 
-        color_form = QFormLayout()
+        # 강조 글자색 + 배경 강조색: 2열
         self.combo_emphasis_color = QComboBox()
         self.combo_emphasis_color.addItems([
-            "없음 (기본 검정)", "네이버 그린", "블루", "오렌지", "빨강"
+            "없음 (기본 검정)", "그린 (#54b800)", "블루 (#0078cb)", "오렌지 (#ff9300)", "레드 (#ff0010)"
         ])
-        color_form.addRow("강조 글자색:", self.combo_emphasis_color)
 
         self.combo_highlight_color = QComboBox()
-        self.combo_highlight_color.addItems(["없음", "노란색 형광펜", "연두색 형광펜", "연분홍 형광펜"])
-        color_form.addRow("배경 강조색:", self.combo_highlight_color)
-        vlayout.addLayout(color_form)
+        self.combo_highlight_color.addItems([
+            "없음",
+            "노란색 (#fff593)",
+            "연두색 (#e3fdc8)",
+            "연분홍 (#ffb7de)"
+        ])
+
+        vlayout.addLayout(self._two_col(
+            "강조 글자색", self.combo_emphasis_color,
+            "배경 강조색", self.combo_highlight_color
+        ))
 
         # 정렬
+        vlayout.addWidget(self._label_above("정렬"))
         align_row = QHBoxLayout()
         self.radio_align_left = QRadioButton("왼쪽")
         self.radio_align_left.setChecked(True)
@@ -311,71 +384,60 @@ class UnifiedSettingsTab(QWidget):
         self.align_button_group.addButton(self.radio_align_left, 0)
         self.align_button_group.addButton(self.radio_align_center, 1)
         self.align_button_group.addButton(self.radio_align_right, 2)
-        align_row.addWidget(QLabel("정렬:"))
         align_row.addWidget(self.radio_align_left)
         align_row.addWidget(self.radio_align_center)
         align_row.addWidget(self.radio_align_right)
         align_row.addStretch()
         vlayout.addLayout(align_row)
 
-        # 스티커
-        sticker_form = QFormLayout()
+        # 스티커 팩 + 스티커 빈도: 2열
         self.combo_sticker_pack = QComboBox()
         self._load_sticker_packs()
-        sticker_form.addRow("스티커 팩:", self.combo_sticker_pack)
 
         self.combo_sticker_frequency = QComboBox()
         self.combo_sticker_frequency.addItems(["사용 안함", "적게", "보통", "많이"])
         self.combo_sticker_frequency.setCurrentIndex(2)
-        sticker_form.addRow("스티커 빈도:", self.combo_sticker_frequency)
 
-        vlayout.addLayout(sticker_form)
+        vlayout.addLayout(self._two_col(
+            "스티커 팩", self.combo_sticker_pack,
+            "스티커 빈도", self.combo_sticker_frequency
+        ))
 
         group.setLayout(vlayout)
         layout.addWidget(group)
 
     def _create_category_section(self, layout):
         group = QGroupBox("카테고리 설정")
-        form = QFormLayout()
+        vlayout = QVBoxLayout()
+        vlayout.setSpacing(12)
 
         desc = QLabel("실제 블로그에 등록된 카테고리명과 정확히 일치해야 합니다.")
-        desc.setObjectName("mutedLabel")
+        desc.setEnabled(False)
         desc.setWordWrap(True)
-        form.addRow(desc)
+        vlayout.addWidget(desc)
 
+        vlayout.addWidget(self._label_above("정보성 글쓰기"))
         self.input_info_category = QLineEdit()
         self.input_info_category.setPlaceholderText("예: 자동차정보/유용한팁")
-        form.addRow("정보성 글쓰기:", self.input_info_category)
+        vlayout.addWidget(self.input_info_category)
 
+        vlayout.addWidget(self._label_above("출고후기"))
         self.input_delivery_category = QLineEdit()
         self.input_delivery_category.setPlaceholderText("예: 출고후기/고객이야기")
-        form.addRow("출고후기:", self.input_delivery_category)
-
-        group.setLayout(form)
-        layout.addWidget(group)
-
-    def _create_data_section(self, layout):
-        group = QGroupBox("데이터 관리")
-        vlayout = QVBoxLayout()
-
-        self.btn_export_csv = QPushButton("발행 이력 CSV 내보내기")
-        self.btn_export_csv.setObjectName("secondaryButton")
-        self.btn_export_csv.clicked.connect(self.export_csv)
-        vlayout.addWidget(self.btn_export_csv)
+        vlayout.addWidget(self.input_delivery_category)
 
         group.setLayout(vlayout)
         layout.addWidget(group)
 
     # ============================================================
-    # Preset logic
+    # Structure mode logic
     # ============================================================
 
-    def _on_structure_preset_changed(self, index):
-        if index == 1:  # 인기 블로그
-            self.spin_heading_count.setValue(4)
-            self.spin_quotation_count.setValue(2)
-            self.spin_image_count.setValue(8)
-            self.combo_ending_style.setCurrentIndex(1)  # 질문 유도
+    def _on_structure_mode_changed(self, button_id: int, checked: bool):
+        """자동/수동 모드 전환 시 수동 설정 위젯 활성화/비활성화"""
+        if checked:
+            is_manual = (button_id == 1)  # 1 = 수동 모드
+            self.manual_structure_widget.setEnabled(is_manual)
 
     # ============================================================
     # Image helpers
@@ -411,47 +473,6 @@ class UnifiedSettingsTab(QWidget):
             return False
 
     # ============================================================
-    # CSV export
-    # ============================================================
-
-    def export_csv(self):
-        try:
-            from core.post_history import PostHistoryManager
-            manager = PostHistoryManager()
-            posts = manager.get_recent_posts(limit=9999)
-        except Exception as e:
-            QMessageBox.warning(self, "오류", f"발행 이력을 불러올 수 없습니다.\n{e}")
-            return
-
-        if not posts:
-            QMessageBox.information(self, "안내", "내보낼 발행 이력이 없습니다.")
-            return
-
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "CSV 저장", "post_history.csv", "CSV 파일 (*.csv)"
-        )
-        if not file_path:
-            return
-
-        try:
-            with open(file_path, "w", newline="", encoding="utf-8-sig") as f:
-                writer = csv.writer(f)
-                writer.writerow(["날짜", "제목", "주제", "카테고리", "모드", "태그", "본문 미리보기"])
-                for p in posts:
-                    writer.writerow([
-                        p.get("date", ""),
-                        p.get("title", ""),
-                        p.get("topic", ""),
-                        p.get("category", ""),
-                        p.get("mode", ""),
-                        p.get("tags", ""),
-                        (p.get("content", "") or "")[:100]
-                    ])
-            QMessageBox.information(self, "완료", f"CSV 저장 완료\n{file_path}")
-        except Exception as e:
-            QMessageBox.warning(self, "오류", f"CSV 저장 실패\n{e}")
-
-    # ============================================================
     # Save / Load
     # ============================================================
 
@@ -467,12 +488,11 @@ class UnifiedSettingsTab(QWidget):
         self.settings.setValue("writing/default_length", self.combo_default_length.currentIndex())
 
         # 구조
-        self.settings.setValue("writing/post_structure", self.combo_post_structure.currentIndex())
+        self.settings.setValue("writing/structure_mode", self.structure_mode_group.checkedId())
         self.settings.setValue("writing/heading_count", self.spin_heading_count.value())
         self.settings.setValue("writing/quotation_count", self.spin_quotation_count.value())
         self.settings.setValue("writing/image_count", self.spin_image_count.value())
         self.settings.setValue("writing/ending_style", self.combo_ending_style.currentIndex())
-        self.settings.setValue("writing/auto_thumbnail", self.chk_auto_thumbnail.isChecked())
 
         # 카테고리
         self.settings.setValue("writing/info_category", self.input_info_category.text().strip())
@@ -524,18 +544,21 @@ class UnifiedSettingsTab(QWidget):
             self.settings.value("writing/default_length", 0, type=int))
 
         # 구조
-        self.combo_post_structure.setCurrentIndex(
-            self.settings.value("writing/post_structure", 0, type=int))
+        structure_mode = self.settings.value("writing/structure_mode", 0, type=int)
+        if structure_mode == 1:
+            self.radio_structure_manual.setChecked(True)
+            self.manual_structure_widget.setEnabled(True)
+        else:
+            self.radio_structure_auto.setChecked(True)
+            self.manual_structure_widget.setEnabled(False)
         self.spin_heading_count.setValue(
             self.settings.value("writing/heading_count", 4, type=int))
         self.spin_quotation_count.setValue(
             self.settings.value("writing/quotation_count", 2, type=int))
         self.spin_image_count.setValue(
-            self.settings.value("writing/image_count", 8, type=int))
+            self.settings.value("writing/image_count", 2, type=int))
         self.combo_ending_style.setCurrentIndex(
             self.settings.value("writing/ending_style", 0, type=int))
-        self.chk_auto_thumbnail.setChecked(
-            self.settings.value("writing/auto_thumbnail", True, type=bool))
 
         # 카테고리
         self.input_info_category.setText(
@@ -623,10 +646,15 @@ class UnifiedSettingsTab(QWidget):
         return self.combo_default_length.currentIndex()
 
     def get_post_structure(self) -> str:
-        return "popular" if self.combo_post_structure.currentIndex() == 1 else "default"
+        """자동/수동 모드 반환"""
+        return "manual" if self.radio_structure_manual.isChecked() else "auto"
 
     def get_structure_params(self) -> dict:
+        """자동/수동 모드에 따라 구조 파라미터 반환"""
+        if self.radio_structure_auto.isChecked():
+            return {"mode": "auto"}
         return {
+            "mode": "manual",
             "heading_count": self.spin_heading_count.value(),
             "quotation_count": self.spin_quotation_count.value(),
             "image_count": self.spin_image_count.value(),
@@ -634,38 +662,60 @@ class UnifiedSettingsTab(QWidget):
         }
 
     def is_auto_thumbnail_enabled(self) -> bool:
-        return self.chk_auto_thumbnail.isChecked()
+        return True  # 항상 썸네일 생성
 
     def get_sticker_settings(self) -> dict:
         freq_idx = self.combo_sticker_frequency.currentIndex()
+        # userData에서 pack_id 가져오기 (없으면 currentText 사용)
+        pack_id = self.combo_sticker_pack.currentData() or self.combo_sticker_pack.currentText()
         return {
             "enabled": freq_idx > 0,
             "pack": self.combo_sticker_pack.currentIndex(),
-            "packName": self.combo_sticker_pack.currentText(),
+            "packName": pack_id,  # 내부 ID 사용 (cafe_001 등)
             "frequency": freq_idx,
             "frequencyName": self.combo_sticker_frequency.currentText()
         }
 
     def _load_sticker_packs(self):
-        """sticker_map.json에서 팩 목록을 로드하여 콤보박스에 추가"""
+        """sticker_map.json에서 팩 목록을 로드하여 콤보박스에 추가 (미리보기 이미지 포함)"""
         import json
         from pathlib import Path
+        from PySide6.QtGui import QIcon, QPixmap
+        from PySide6.QtCore import QSize
 
         map_path = Path(__file__).parent.parent / "assets" / "stickers" / "sticker_map.json"
+        stickers_dir = Path(__file__).parent.parent / "assets" / "stickers"
+        self._sticker_pack_map = {}  # display_name -> pack_id 매핑
+
+        # 콤보박스 설정: 이미지만 표시 (텍스트 없음)
+        self.combo_sticker_pack.setIconSize(QSize(40, 40))
+        self.combo_sticker_pack.setMinimumWidth(70)
 
         if map_path.exists():
             try:
                 with open(map_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                packs = list(data.get("packs", {}).keys())
+                packs = data.get("packs", {})
                 if packs:
-                    self.combo_sticker_pack.addItems(packs)
+                    for pack_id, pack_info in packs.items():
+                        display_name = pack_info.get("display_name", pack_id)
+
+                        # 미리보기 이미지 로드 (sticker_0.png) - 텍스트 없이 아이콘만
+                        preview_path = stickers_dir / pack_id / "sticker_0.png"
+                        if preview_path.exists():
+                            icon = QIcon(str(preview_path))
+                            self.combo_sticker_pack.addItem(icon, "", userData=pack_id)
+                        else:
+                            # 이미지 없으면 pack_id 표시 (fallback)
+                            self.combo_sticker_pack.addItem(pack_id, userData=pack_id)
+
+                        self._sticker_pack_map[display_name] = pack_id
                     return
             except Exception:
                 pass
 
         # sticker_map.json이 없으면 기본값
-        self.combo_sticker_pack.addItems(["기본 (수집 필요)"])
+        self.combo_sticker_pack.addItem("기본", userData="default")
 
     def get_naver_editor_style_settings(self) -> dict:
         font_map = {
@@ -673,22 +723,27 @@ class UnifiedSettingsTab(QWidget):
             3: "nanumbarungothic", 4: "nanumsquare", 5: "maruburi",
             6: "dasisijakae", 7: "barenhipi", 8: "uridalsonglssi"
         }
+        # 네이버 에디터 실제 유효 크기: 11, 13, 15, 16, 19, 24, 28, 30, 34, 38
         fontsize_map = {
-            0: "se-fs9", 1: "se-fs10", 2: "se-fs11",
-            3: "se-fs13", 4: "se-fs15", 5: "se-fs18",
-            6: "se-fs24", 7: "se-fs32"
+            0: "se-fs11", 1: "se-fs13", 2: "se-fs15",
+            3: "se-fs16", 4: "se-fs19", 5: "se-fs24",
+            6: "se-fs28", 7: "se-fs30"
         }
         lineheight_map = {0: 1.5, 1: 1.8, 2: 2.0, 3: 2.5}
-        heading_size_map = {0: "se-fs18", 1: "se-fs18", 2: "se-fs24", 3: "se-fs24"}
+        # 소제목 크기: fs18 없음 → fs19 사용
+        heading_size_map = {0: "se-fs19", 1: "se-fs19", 2: "se-fs24", 3: "se-fs24"}
         heading_bold_map = {0: False, 1: True, 2: False, 3: True}
-        heading_color_map = {0: None, 1: "#03C75A", 2: "#4A90E2", 3: "#333333"}
+        # 네이버 팔레트 실제 색상
+        heading_color_map = {0: None, 1: "#54b800", 2: "#0078cb", 3: "#ff0010"}
         quote_style_map = {
             0: "quotation_line", 1: "quotation_bubble", 2: "quotation_corner",
             3: "quotation_underline", 4: "quotation_postit"
         }
         divider_style_map = {0: "line1", 1: "line2", 2: "line3", 3: "line4", 4: "line5", 5: "line6", 6: "line7"}
-        emphasis_color_map = {0: None, 1: "#03C75A", 2: "#4A90E2", 3: "#F39C12", 4: "#E74C3C"}
-        highlight_color_map = {0: None, 1: "#FFFF00", 2: "#90EE90", 3: "#FFB6C1"}
+        # 네이버 팔레트 실제 색상
+        emphasis_color_map = {0: None, 1: "#54b800", 2: "#0078cb", 3: "#ff9300", 4: "#ff0010"}
+        # 네이버 팔레트 실제 형광펜 색상
+        highlight_color_map = {0: None, 1: "#fff593", 2: "#e3fdc8", 3: "#ffb7de"}
         align_map = {0: "left", 1: "center", 2: "right"}
 
         return {
@@ -720,7 +775,7 @@ class UnifiedSettingsTab(QWidget):
             "sticker": {
                 "enabled": self.combo_sticker_frequency.currentIndex() > 0,
                 "pack": self.combo_sticker_pack.currentIndex(),
-                "packName": self.combo_sticker_pack.currentText(),
+                "packName": self.combo_sticker_pack.currentData() or self.combo_sticker_pack.currentText(),  # 내부 ID
                 "frequency": self.combo_sticker_frequency.currentIndex(),
                 "frequencyName": self.combo_sticker_frequency.currentText()
             }

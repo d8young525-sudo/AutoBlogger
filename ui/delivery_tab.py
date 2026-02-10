@@ -1,6 +1,6 @@
 """
-출고 후기 탭 - 차량 출고 후기 자동 포스팅 기능
-v3.5.1: 작성 스타일을 글쓰기 환경설정 탭으로 통합
+출고 후기 탭 - 차량 출고 후기 자동 포스팅 기능 (간소화 버전)
+v3.6.0: UI 간소화 - 후기 생성 + 발행 통합
 사진 업로드, 상담 후기 입력, 개인정보 블러 처리 지원
 """
 import os
@@ -18,6 +18,7 @@ from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QPixmap, QImage
 
 import requests
+from ui.styles import GREEN_BUTTON_STYLE, NEUTRAL_BUTTON_STYLE
 
 from config import Config
 from core.hashtag_generator import HashtagWorker, extract_tags_local
@@ -251,11 +252,13 @@ class DeliveryTab(QWidget):
         # 사진 선택 버튼들
         btn_layout = QHBoxLayout()
         self.btn_add_photos = QPushButton("사진 추가")
-        self.btn_add_photos.setObjectName("infoButton")
+        self.btn_add_photos.setMinimumHeight(60)
+        self.btn_add_photos.setStyleSheet(NEUTRAL_BUTTON_STYLE)
         self.btn_add_photos.clicked.connect(self.add_photos)
-        
+
         self.btn_clear_photos = QPushButton("전체 삭제")
-        self.btn_clear_photos.setObjectName("dangerButton")
+        self.btn_clear_photos.setMinimumHeight(60)
+        self.btn_clear_photos.setStyleSheet(NEUTRAL_BUTTON_STYLE)
         self.btn_clear_photos.clicked.connect(self.clear_photos)
         
         btn_layout.addWidget(self.btn_add_photos)
@@ -280,7 +283,6 @@ class DeliveryTab(QWidget):
         
         # 블러 처리 안내
         lbl_privacy_notice = QLabel("얼굴과 번호판은 개인정보 보호를 위해 블러 처리를 권장합니다.")
-        lbl_privacy_notice.setObjectName("warningLabel")
         photo_layout.addWidget(lbl_privacy_notice)
         
         group_photos.setLayout(photo_layout)
@@ -288,51 +290,70 @@ class DeliveryTab(QWidget):
         
         # 2. 고객 정보
         group_customer = QGroupBox("2. 고객 정보 (선택)")
-        customer_form = QFormLayout()
-        
-        # 연령대
+        customer_layout = QVBoxLayout()
+        customer_layout.setSpacing(12)
+
+        # 연령대 + 성별: 2열 배치
+        age_gender_row = QHBoxLayout()
+        age_gender_row.setSpacing(16)
+
+        age_col = QVBoxLayout()
+        age_col.setSpacing(4)
+        age_col.addWidget(QLabel("연령대"))
         self.combo_age = QComboBox()
         self.combo_age.addItems(["선택 안함", "20대", "30대", "40대", "50대", "60대 이상"])
-        customer_form.addRow("연령대:", self.combo_age)
-        
-        # 성별
+        age_col.addWidget(self.combo_age)
+        age_gender_row.addLayout(age_col, 1)
+
+        gender_col = QVBoxLayout()
+        gender_col.setSpacing(4)
+        gender_col.addWidget(QLabel("성별"))
         self.combo_gender = QComboBox()
         self.combo_gender.addItems(["선택 안함", "남성", "여성"])
-        customer_form.addRow("성별:", self.combo_gender)
-        
-        # 지역
+        gender_col.addWidget(self.combo_gender)
+        age_gender_row.addLayout(gender_col, 1)
+
+        customer_layout.addLayout(age_gender_row)
+
+        # 지역: 전체 폭
+        customer_layout.addWidget(QLabel("지역"))
         self.input_region = QLineEdit()
         self.input_region.setPlaceholderText("예: 서울, 경기, 부산 등")
-        customer_form.addRow("지역:", self.input_region)
-        
-        group_customer.setLayout(customer_form)
+        customer_layout.addWidget(self.input_region)
+
+        group_customer.setLayout(customer_layout)
         layout.addWidget(group_customer)
-        
+
         # 3. 차량 정보
         group_vehicle = QGroupBox("3. 차량 정보")
-        vehicle_form = QFormLayout()
-        
-        # 모델 (브랜드 제거 - 벤츠 영업사원 전용)
+        vehicle_layout = QVBoxLayout()
+        vehicle_layout.setSpacing(12)
+
+        # 모델
+        vehicle_layout.addWidget(QLabel("모델"))
         self.input_model = QLineEdit()
         self.input_model.setPlaceholderText("예: E클래스, S클래스, GLE, AMG GT 등")
-        vehicle_form.addRow("모델:", self.input_model)
-        
+        vehicle_layout.addWidget(self.input_model)
+
         # 연식
+        vehicle_layout.addWidget(QLabel("연식"))
         self.input_year = QLineEdit()
         self.input_year.setPlaceholderText("예: 2024")
-        vehicle_form.addRow("연식:", self.input_year)
-        
+        vehicle_layout.addWidget(self.input_year)
+
         # 색상
+        vehicle_layout.addWidget(QLabel("색상"))
         self.input_color = QLineEdit()
         self.input_color.setPlaceholderText("예: 화이트, 블랙, 실버 등")
-        vehicle_form.addRow("색상:", self.input_color)
-        
-        # 옵션
+        vehicle_layout.addWidget(self.input_color)
+
+        # 주요 옵션
+        vehicle_layout.addWidget(QLabel("주요 옵션"))
         self.input_options = QLineEdit()
         self.input_options.setPlaceholderText("예: 풀옵션, 네비게이션, 선루프 등")
-        vehicle_form.addRow("주요 옵션:", self.input_options)
-        
-        group_vehicle.setLayout(vehicle_form)
+        vehicle_layout.addWidget(self.input_options)
+
+        group_vehicle.setLayout(vehicle_layout)
         layout.addWidget(group_vehicle)
         
         # 4. 상담 후기 입력
@@ -353,40 +374,16 @@ class DeliveryTab(QWidget):
         group_review.setLayout(review_layout)
         layout.addWidget(group_review)
         
-        # 5. 실행 버튼 (작성 스타일 섹션 제거됨 - 글쓰기 환경설정에서 관리)
+        # 5. 발행 버튼 (후기 생성 + 발행 통합)
         style_notice = QLabel("작성 스타일(말투, 분량 등)은 [글쓰기 환경설정] 탭에서 통합 관리됩니다.")
-        style_notice.setObjectName("mutedLabel")
         layout.addWidget(style_notice)
-        
-        self.btn_generate = QPushButton("후기 글 생성하기")
-        self.btn_generate.setObjectName("primaryButton")
-        self.btn_generate.clicked.connect(self.generate_review)
-        layout.addWidget(self.btn_generate)
-        
-        # 6. 결과 미리보기
-        layout.addWidget(QLabel("생성된 후기 미리보기"))
-        self.result_view = QTextEdit()
-        self.result_view.setMinimumHeight(300)
-        self.result_view.setPlaceholderText("생성된 출고 후기가 여기에 표시됩니다.")
-        layout.addWidget(self.result_view)
-        
-        # 해시태그
-        tag_layout = QHBoxLayout()
-        self.txt_tags = QLineEdit()
-        self.txt_tags.setPlaceholderText("해시태그 (쉼표로 구분)")
-        self.btn_regen_tags = QPushButton("태그 재생성")
-        self.btn_regen_tags.setObjectName("infoButton")
-        self.btn_regen_tags.clicked.connect(self._regenerate_tags)
-        self.btn_regen_tags.setEnabled(False)
-        tag_layout.addWidget(self.txt_tags, stretch=1)
-        tag_layout.addWidget(self.btn_regen_tags)
-        layout.addLayout(tag_layout)
 
-        # 하단 발행 버튼
-        self.btn_publish = QPushButton("현재 내용으로 발행하기")
-        self.btn_publish.setObjectName("secondaryButton")
-        self.btn_publish.clicked.connect(self.publish_now)
-        self.btn_publish.setEnabled(False)
+        # 내부 상태 변수 (UI 없이 데이터 저장용)
+        self.generated_tags = ""
+
+        self.btn_publish = QPushButton("발행")
+        self.btn_publish.setStyleSheet(GREEN_BUTTON_STYLE)
+        self.btn_publish.clicked.connect(self.request_full_publish)
         layout.addWidget(self.btn_publish)
         
         scroll.setWidget(content_widget)
@@ -459,18 +456,18 @@ class DeliveryTab(QWidget):
             return False
         return True
         
-    def generate_review(self):
-        """출고 후기 생성"""
+    def request_full_publish(self):
+        """발행 버튼 클릭 - 후기 생성 + 발행 한번에 실행"""
         if not self.validate_form():
             return
-            
+
         data = self.get_form_data()
         data['action'] = 'generate'
         data['mode'] = 'delivery'
-        
-        self.btn_generate.setEnabled(False)
-        self.btn_generate.setText("생성 중...")
-        
+
+        self.btn_publish.setEnabled(False)
+        self.btn_publish.setText("생성 중...")
+
         self.worker = DeliveryPostWorker(data)
         self.worker.finished.connect(self.on_generation_finished)
         self.worker.error.connect(self.on_generation_error)
@@ -478,55 +475,48 @@ class DeliveryTab(QWidget):
         self.worker.start()
         
     def on_generation_finished(self, result: dict):
-        """생성 완료 처리"""
-        self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("생성 완료!")
-        
+        """생성 완료 처리 → 자동 발행"""
         title = result.get('title', '출고 후기')
         content = result.get('content', '') or result.get('content_text', '')
-        
-        self.result_view.setText(f"제목: {title}\n\n{content}")
-        self.btn_publish.setEnabled(True)
-        self.log_signal.emit("출고 후기 생성 완료! 확인 후 발행해주세요.")
-        
-    def on_generation_error(self, error_msg: str):
-        """에러 처리"""
-        self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("후기 글 생성하기")
-        self.log_signal.emit(f"{error_msg}")
-        
-    def publish_now(self):
-        """현재 내용 발행"""
-        content = self.result_view.toPlainText()
-        if not content:
-            QMessageBox.warning(self, "경고", "발행할 내용이 없습니다.")
-            return
-            
-        lines = content.split('\n')
-        title = "출고 후기"
-        body = content
-        
-        if len(lines) > 0 and lines[0].startswith("제목:"):
-            title = lines[0].replace("제목:", "").strip()
-            body = "\n".join(lines[1:]).strip()
-        
+        blocks = result.get('blocks', None)
+
+        self.generated_title = title
+        self.generated_content = content
+        self.generated_blocks = blocks
+
+        self.log_signal.emit("출고 후기 생성 완료! 발행 진행 중...")
+        self.btn_publish.setText("발행 중...")
+
         # 카테고리 가져오기
         category = ""
+        naver_style = {}
         if self.writing_settings_tab:
             category = self.writing_settings_tab.get_delivery_category()
-            
+            naver_style = self.writing_settings_tab.get_naver_editor_style_settings()
+
+        # 자동 발행 실행
         data = {
             'action': 'publish_only',
             'mode': 'delivery',
             'title': title,
-            'content': body,
+            'content': content,
             'category': category,
-            'tags': self.txt_tags.text().strip()
+            'tags': '',  # 해시태그는 발행 시 자동 생성
+            'naver_style': naver_style
         }
+        if blocks:
+            data['blocks'] = blocks
+
         self.start_signal.emit(data)
+        
+    def on_generation_error(self, error_msg: str):
+        """에러 처리"""
+        self.btn_publish.setEnabled(True)
+        self.btn_publish.setText("발행")
+        self.log_signal.emit(f"{error_msg}")
 
     def update_result_view(self, result_data):
-        """결과 뷰어 업데이트"""
+        """결과 뷰어 업데이트 - 발행 버튼 리셋"""
         title = result_data.get("title", "출고 후기")
         content = result_data.get("content_text", "") or result_data.get("content", "")
 
@@ -549,52 +539,51 @@ class DeliveryTab(QWidget):
                     lines.append("\n━━━━━━━━━━━━━━━━━━━━\n")
                 elif btype == "image_placeholder":
                     desc = block.get("description", "이미지")
-                    lines.append(f"\n[📷 {desc}]\n")
+                    lines.append(f"\n[{desc}]\n")
             content = "\n".join(lines)
 
         self.generated_content = content
         self.generated_title = title
 
-        self.result_view.setText(f"제목: {title}\n\n{content}")
-        self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("생성 완료!")
+        # 발행 버튼 리셋
         self.btn_publish.setEnabled(True)
-        self.btn_regen_tags.setEnabled(True)
-        self._auto_generate_tags()
+        self.btn_publish.setText("발행")
+
+        self.log_signal.emit(f"후기 처리 완료: {title}")
 
     def _auto_generate_tags(self):
-        """생성된 콘텐츠 기반 해시태그 자동 생성"""
+        """생성된 콘텐츠 기반 해시태그 자동 생성 (Gemini Few-shot)"""
         title = getattr(self, 'generated_title', '')
         content = getattr(self, 'generated_content', '')
         if not title and not content:
             return
-        tags = extract_tags_local(title, content)
-        if tags:
-            self.txt_tags.setText(", ".join(tags))
 
-    def _regenerate_tags(self):
-        """해시태그 재생성 (AI 시도 → 로컬 폴백)"""
-        title = getattr(self, 'generated_title', '')
-        content = getattr(self, 'generated_content', '')
-        if not title and not content:
-            return
-        self.btn_regen_tags.setEnabled(False)
-        self.btn_regen_tags.setText("생성 중...")
+        self.log_signal.emit("해시태그 생성 중...")
         self._tag_worker = HashtagWorker(title, content)
         self._tag_worker.finished.connect(self._on_tags_generated)
-        self._tag_worker.error.connect(lambda _: self._reset_tag_button())
+        self._tag_worker.error.connect(self._on_tags_error)
         self._tag_worker.start()
 
     def _on_tags_generated(self, tags: list):
+        """해시태그 생성 완료 - 내부 변수에 저장"""
         if tags:
-            self.txt_tags.setText(", ".join(tags))
-        self._reset_tag_button()
+            self.generated_tags = ", ".join(tags)
+            self.log_signal.emit(f"해시태그 {len(tags)}개 생성 완료")
+        else:
+            self.generated_tags = ""
 
-    def _reset_tag_button(self):
-        self.btn_regen_tags.setEnabled(True)
-        self.btn_regen_tags.setText("태그 재생성")
+    def _on_tags_error(self, error_msg: str):
+        """해시태그 생성 오류 - 로컬 폴백"""
+        self.log_signal.emit(f"해시태그 AI 생성 실패, 로컬 추출 시도...")
+        title = getattr(self, 'generated_title', '')
+        content = getattr(self, 'generated_content', '')
+        tags = extract_tags_local(title, content)
+        if tags:
+            self.generated_tags = ", ".join(tags)
+        else:
+            self.generated_tags = ""
 
-    def reset_generate_button(self):
-        """생성 버튼 초기화 (에러 시 호출)"""
-        self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("후기 글 생성하기")
+    def reset_publish_button(self):
+        """발행 버튼 초기화"""
+        self.btn_publish.setEnabled(True)
+        self.btn_publish.setText("발행")

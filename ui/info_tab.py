@@ -1,8 +1,6 @@
 """
-정보성 글쓰기 탭 - 세로 스크롤 레이아웃
-섹션 1: 주제 선택
-섹션 2: 세부 설정 + 원고 생성
-섹션 3: 미리보기 + 발행
+정보성 글쓰기 탭 - 초간소화 버전 (v3.16.0)
+주제 선택 → 발행 (세부 설정 UI 제거, 백그라운드 분석)
 """
 import requests
 import re
@@ -10,12 +8,12 @@ import base64
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QComboBox, QLineEdit, QPushButton, QRadioButton,
                                QButtonGroup, QLabel, QMessageBox, QScrollArea,
-                               QListWidget, QListWidgetItem, QTextEdit,
-                               QFrame, QDateTimeEdit)
-from PySide6.QtCore import Qt, Signal, QThread, QDateTime, QTimer
+                               QFrame, QGroupBox)
+from PySide6.QtCore import Qt, Signal, QThread, QTimer
 from PySide6.QtGui import QPixmap, QImage
 
 from config import Config
+from ui.styles import GREEN_BUTTON_STYLE, CARD_SELECTED_STYLE, CARD_UNSELECTED_STYLE
 from core.post_history import is_duplicate_topic, get_stats
 from core.hashtag_generator import HashtagWorker, extract_tags_local
 
@@ -113,10 +111,11 @@ class InfoTab(QWidget):
         self.generated_content = ""
         self.generated_title = ""
         self.hashtag_worker = None
-        self.schedule_timer = None
+        self.generated_tags = ""  # 해시태그 저장용
         self.current_topic_for_thumbnail = ""
         self.thumbnail_regenerate_count = 0
         self.analysis_done = False
+        self.generated_blocks = None  # 원본 블록 데이터 보존
 
         self.init_ui()
 
@@ -130,18 +129,15 @@ class InfoTab(QWidget):
     def _make_section(self, title: str, icon: str = "") -> tuple:
         """섹션 카드 프레임 생성"""
         frame = QFrame()
-        frame.setObjectName("sectionCard")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(18, 14, 18, 14)
         layout.setSpacing(10)
 
         header = QLabel(f"{icon}  {title}" if icon else title)
-        header.setObjectName("sectionHeader")
         layout.addWidget(header)
 
         line = QFrame()
         line.setFixedHeight(1)
-        line.setObjectName("sectionDivider")
         layout.addWidget(line)
 
         return frame, layout
@@ -160,8 +156,7 @@ class InfoTab(QWidget):
         self.content_layout.setContentsMargins(8, 8, 8, 8)
 
         self._build_section_topic()
-        self._build_section_detail()
-        self._build_section_preview()
+        self._init_internal_data()
 
         self.content_layout.addStretch()
         self.scroll.setWidget(content)
@@ -169,29 +164,40 @@ class InfoTab(QWidget):
         self.setLayout(outer)
 
     # ============================================================
-    # 섹션 1: 주제 선택
+    # 주제 생성 영역 (헤더 없이 바로 카드 배치)
     # ============================================================
 
     def _build_section_topic(self):
-        frame, layout = self._make_section("주제 선택", "1")
+        self.topic_mode_group = QButtonGroup()
+
+        # ========== 1. 카드 선택 컨테이너 (초기 상태) ==========
+        self.card_container = QGroupBox("주제 생성")
+        card_container_layout = QVBoxLayout(self.card_container)
+        card_container_layout.setSpacing(16)
 
         # 카드형 좌우 배치
         cards_row = QHBoxLayout()
-        cards_row.setSpacing(10)
-        self.topic_mode_group = QButtonGroup()
+        cards_row.setSpacing(16)
 
         # 좌측 카드: 카테고리
         left_card = QFrame()
+        left_card.setStyleSheet(CARD_SELECTED_STYLE)
         left_card.setCursor(Qt.PointingHandCursor)
         left_card.mousePressEvent = lambda e: self.radio_use_category.setChecked(True)
-        left_card.setObjectName("cardSelected")
         left_layout = QVBoxLayout(left_card)
+        left_layout.setContentsMargins(12, 12, 12, 8)
+        left_layout.setSpacing(18)
 
-        self.radio_use_category = QRadioButton("카테고리에서 주제 생성")
+        lbl_left = QLabel("카테고리에서 주제 생성")
+        lbl_left.setAlignment(Qt.AlignCenter)
+        lbl_left.setStyleSheet("font-size: 12pt;")
+        left_layout.addWidget(lbl_left)
+
+        self.radio_use_category = QRadioButton()
         self.radio_use_category.setChecked(True)
         self.radio_use_category.toggled.connect(self.toggle_topic_mode)
+        self.radio_use_category.hide()
         self.topic_mode_group.addButton(self.radio_use_category, 0)
-        left_layout.addWidget(self.radio_use_category)
 
         self.combo_cat = QComboBox()
         self.combo_cat.setEditable(True)
@@ -206,15 +212,22 @@ class InfoTab(QWidget):
 
         # 우측 카드: 키워드
         right_card = QFrame()
+        right_card.setStyleSheet(CARD_UNSELECTED_STYLE)
         right_card.setCursor(Qt.PointingHandCursor)
         right_card.mousePressEvent = lambda e: self.radio_use_keyword.setChecked(True)
-        right_card.setObjectName("cardUnselected")
         right_layout = QVBoxLayout(right_card)
+        right_layout.setContentsMargins(12, 12, 12, 8)
+        right_layout.setSpacing(18)
 
-        self.radio_use_keyword = QRadioButton("키워드 기반 주제 생성")
+        lbl_right = QLabel("키워드 기반 주제 생성")
+        lbl_right.setAlignment(Qt.AlignCenter)
+        lbl_right.setStyleSheet("font-size: 12pt;")
+        right_layout.addWidget(lbl_right)
+
+        self.radio_use_keyword = QRadioButton()
         self.radio_use_keyword.toggled.connect(self.toggle_topic_mode)
+        self.radio_use_keyword.hide()
         self.topic_mode_group.addButton(self.radio_use_keyword, 1)
-        right_layout.addWidget(self.radio_use_keyword)
 
         self.manual_topic = QLineEdit()
         self.manual_topic.setPlaceholderText("키워드 입력 (예: 전기차 충전)")
@@ -224,177 +237,105 @@ class InfoTab(QWidget):
 
         self.left_card = left_card
         self.right_card = right_card
-        layout.addLayout(cards_row)
+        card_container_layout.addLayout(cards_row)
 
         # 주제 생성 버튼
         self.btn_generate_topic = QPushButton("주제 생성하기")
-        self.btn_generate_topic.setObjectName("primaryButton")
+        self.btn_generate_topic.setStyleSheet(GREEN_BUTTON_STYLE)
         self.btn_generate_topic.clicked.connect(self.generate_topics)
-        layout.addWidget(self.btn_generate_topic)
+        card_container_layout.addWidget(self.btn_generate_topic)
 
-        # 생성된 주제 선택 영역
-        self.lbl_topic_result = QLabel("생성된 주제 선택:")
-        layout.addWidget(self.lbl_topic_result)
+        self.content_layout.addWidget(self.card_container)
 
-        self.topic_widget = QWidget()
+        # ========== 2. 요약 컨테이너 (주제 생성 후) ==========
+        self.summary_container = QFrame()
+        summary_layout = QHBoxLayout(self.summary_container)
+        summary_layout.setContentsMargins(16, 12, 16, 12)
+
+        self.lbl_summary = QLabel("")
+        summary_layout.addWidget(self.lbl_summary, 1)
+
+        self.btn_change_mode = QPushButton("변경")
+        self.btn_change_mode.setCursor(Qt.PointingHandCursor)
+        self.btn_change_mode.clicked.connect(self._show_card_mode)
+        summary_layout.addWidget(self.btn_change_mode)
+
+        self.summary_container.hide()  # 초기에는 숨김
+        self.content_layout.addWidget(self.summary_container)
+
+        # ========== 3. 생성된 주제 선택 영역 (초기에는 숨김) ==========
+        self.topic_section = QGroupBox("주제 선택")
+        topic_section_layout = QVBoxLayout(self.topic_section)
+        topic_section_layout.setSpacing(12)
+
+        self.lbl_topic_result = QLabel("생성된 주제 선택")
+        topic_section_layout.addWidget(self.lbl_topic_result)
+
+        # 주제 리스트 프레임
+        self.topic_list_frame = QFrame()
         self.topic_group = QButtonGroup()
-        self.topic_layout_inner = QVBoxLayout(self.topic_widget)
-        self.topic_layout_inner.setAlignment(Qt.AlignTop)
+        self.topic_layout_inner = QVBoxLayout(self.topic_list_frame)
         self.topic_layout_inner.setContentsMargins(0, 0, 0, 0)
+        self.topic_layout_inner.setSpacing(0)
+        topic_section_layout.addWidget(self.topic_list_frame)
 
-        self.topic_placeholder = QLabel("주제 생성 버튼을 눌러 AI 추천 주제를 받아보세요.")
-        self.topic_placeholder.setObjectName("mutedLabel")
-        self.topic_placeholder.setAlignment(Qt.AlignCenter)
-        self.topic_layout_inner.addWidget(self.topic_placeholder)
-
-        layout.addWidget(self.topic_widget)
-
-        # 주제 분석 버튼
-        self.btn_analyze = QPushButton("주제 분석하기")
-        self.btn_analyze.setObjectName("infoButton")
-        self.btn_analyze.clicked.connect(self.run_analysis)
-        self.btn_analyze.setEnabled(False)
-        layout.addWidget(self.btn_analyze)
-
-        self.content_layout.addWidget(frame)
-
-    # ============================================================
-    # 섹션 2: 세부 설정 + 원고 생성
-    # ============================================================
-
-    def _build_section_detail(self):
-        self.detail_section, layout = self._make_section("세부 설정", "2")
-        self.detail_section.setEnabled(False)
-
-        # 타깃 독자
-        layout.addWidget(QLabel("타깃 독자 (1개만 선택):"))
-        self.target_group = QButtonGroup()
-        self.target_widget = QWidget()
-        self.target_layout = QVBoxLayout(self.target_widget)
-        self.target_layout.setAlignment(Qt.AlignTop)
-        self.target_layout.setContentsMargins(0, 0, 0, 0)
-
-        layout.addWidget(self.target_widget)
-
-        # 핵심 정보 요약
-        layout.addWidget(QLabel("핵심 정보 요약:"))
-        self.txt_summary = QTextEdit()
-        self.txt_summary.setMinimumHeight(120)
-        layout.addWidget(self.txt_summary)
-
-        # 예상 질문
-        layout.addWidget(QLabel("예상 질문 (선택):"))
-        self.list_questions = QListWidget()
-        self.list_questions.setMinimumHeight(160)
-        layout.addWidget(self.list_questions)
-
-        # 나만의 인사이트
-        layout.addWidget(QLabel("나만의 인사이트 (직접 입력):"))
-        self.txt_insight = QTextEdit()
-        self.txt_insight.setMinimumHeight(80)
-        layout.addWidget(self.txt_insight)
-
-        # 썸네일 미리보기
-        thumb_row = QHBoxLayout()
-        self.thumbnail_preview = QLabel()
-        self.thumbnail_preview.setFixedSize(150, 90)
-        self.thumbnail_preview.setObjectName("thumbnailPreview")
-        self.thumbnail_preview.setAlignment(Qt.AlignCenter)
-        self.thumbnail_preview.setText("썸네일 대기중...")
-        thumb_row.addWidget(self.thumbnail_preview)
-
-        thumb_btn_col = QVBoxLayout()
-        self.btn_regenerate_thumbnail = QPushButton("다른 이미지로")
-        self.btn_regenerate_thumbnail.setObjectName("accentButton")
-        self.btn_regenerate_thumbnail.clicked.connect(self.regenerate_thumbnail)
-        self.btn_regenerate_thumbnail.setEnabled(False)
-        thumb_btn_col.addWidget(self.btn_regenerate_thumbnail)
-        self.lbl_regenerate_count = QLabel("재생성: 0회")
-        self.lbl_regenerate_count.setObjectName("mutedLabel")
-        thumb_btn_col.addWidget(self.lbl_regenerate_count)
-        thumb_btn_col.addStretch()
-        thumb_row.addLayout(thumb_btn_col)
-        thumb_row.addStretch()
-        layout.addLayout(thumb_row)
-
-        # 원고 생성 버튼
-        self.btn_generate = QPushButton("원고 생성")
-        self.btn_generate.setObjectName("primaryButton")
-        self.btn_generate.clicked.connect(self.request_generate)
-        layout.addWidget(self.btn_generate)
-
-        self.content_layout.addWidget(self.detail_section)
-
-    # ============================================================
-    # 섹션 3: 미리보기 + 발행
-    # ============================================================
-
-    def _build_section_preview(self):
-        self.preview_section, layout = self._make_section("미리보기 · 발행", "3")
-        self.preview_section.setEnabled(False)
-
-        # 미리보기
-        layout.addWidget(QLabel("생성된 글 미리보기"))
-        self.view_text = QTextEdit()
-        self.view_text.setPlaceholderText("원고가 여기에 표시됩니다.")
-        self.view_text.setMinimumHeight(300)
-        layout.addWidget(self.view_text)
-
-        # 해시태그
-        tags_row = QHBoxLayout()
-        tags_row.addWidget(QLabel("해시태그:"))
-        self.txt_tags = QLineEdit()
-        self.txt_tags.setPlaceholderText("자동 생성됩니다 (쉼표 구분)")
-        tags_row.addWidget(self.txt_tags)
-        self.btn_regenerate_tags = QPushButton("재생성")
-        self.btn_regenerate_tags.setObjectName("accentButton")
-        self.btn_regenerate_tags.clicked.connect(self.regenerate_tags)
-        self.btn_regenerate_tags.setEnabled(False)
-        tags_row.addWidget(self.btn_regenerate_tags)
-        layout.addLayout(tags_row)
-
-        # 즉시 발행
-        publish_row = QHBoxLayout()
-        publish_row.addStretch()
-        self.btn_publish = QPushButton("즉시 발행")
-        self.btn_publish.setObjectName("primaryButton")
-        self.btn_publish.clicked.connect(self.request_publish)
+        # 발행 버튼
+        self.btn_publish = QPushButton("발행")
+        self.btn_publish.setStyleSheet(GREEN_BUTTON_STYLE)
+        self.btn_publish.clicked.connect(self.request_full_publish)
         self.btn_publish.setEnabled(False)
-        publish_row.addWidget(self.btn_publish)
-        layout.addLayout(publish_row)
+        topic_section_layout.addWidget(self.btn_publish)
 
-        # 예약 발행
-        schedule_row = QHBoxLayout()
-        schedule_row.addWidget(QLabel("예약:"))
-        self.dt_schedule = QDateTimeEdit()
-        self.dt_schedule.setCalendarPopup(True)
-        self.dt_schedule.setDateTime(QDateTime.currentDateTime().addSecs(3600))
-        self.dt_schedule.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self.dt_schedule.setMinimumDateTime(QDateTime.currentDateTime())
-        schedule_row.addWidget(self.dt_schedule)
+        self.topic_section.hide()  # 초기에는 숨김
+        self.content_layout.addWidget(self.topic_section)
 
-        self.btn_schedule = QPushButton("예약 발행")
-        self.btn_schedule.setObjectName("secondaryButton")
-        self.btn_schedule.clicked.connect(self.schedule_publish)
-        self.btn_schedule.setEnabled(False)
-        schedule_row.addWidget(self.btn_schedule)
+        self.btn_analyze = None
 
-        self.btn_cancel_schedule = QPushButton("예약 취소")
-        self.btn_cancel_schedule.setObjectName("dangerButton")
-        self.btn_cancel_schedule.clicked.connect(self.cancel_scheduled_publish)
-        self.btn_cancel_schedule.hide()
-        schedule_row.addWidget(self.btn_cancel_schedule)
-        layout.addLayout(schedule_row)
+    def _show_card_mode(self):
+        """카드 선택 모드로 돌아가기"""
+        self.summary_container.hide()
+        self.topic_section.hide()
+        self.card_container.show()
+        self._clear_topic_list()
+        # 카드 스타일 복원
+        if self.radio_use_category.isChecked():
+            self.left_card.setStyleSheet(CARD_SELECTED_STYLE)
+            self.right_card.setStyleSheet(CARD_UNSELECTED_STYLE)
+        else:
+            self.left_card.setStyleSheet(CARD_UNSELECTED_STYLE)
+            self.right_card.setStyleSheet(CARD_SELECTED_STYLE)
+        # 상태 초기화
+        self.btn_publish.setEnabled(False)
+        self.analysis_done = False
+        self.thumbnail_image = None
+        self.current_topic_for_thumbnail = ""
 
-        self.lbl_schedule_status = QLabel("")
-        self.lbl_schedule_status.setObjectName("scheduleInactive")
-        layout.addWidget(self.lbl_schedule_status)
+    def _show_summary_mode(self):
+        """요약 모드로 전환 (주제 생성 후)"""
+        # 선택된 모드에 따라 요약 텍스트 설정
+        if self.radio_use_category.isChecked():
+            mode_text = f"카테고리: {self.combo_cat.currentText()}"
+        else:
+            mode_text = f"키워드: {self.manual_topic.text()}"
+        self.lbl_summary.setText(mode_text)
 
-        schedule_info = QLabel("예약 발행은 앱 실행 중에만 동작합니다.")
-        schedule_info.setObjectName("mutedLabel")
-        layout.addWidget(schedule_info)
+        self.card_container.hide()
+        self.summary_container.show()
+        self.topic_section.show()
 
-        self.content_layout.addWidget(self.preview_section)
+    # ============================================================
+    # 내부 데이터 초기화 (UI 없음 - 백그라운드 데이터만)
+    # ============================================================
+
+    def _init_internal_data(self):
+        """UI 없이 내부 데이터 저장용 변수 초기화"""
+        # 분석 결과 저장 (UI 표시 없음)
+        self._targets = []  # 타깃 독자 리스트
+        self._questions = []  # 예상 질문 리스트
+        self._selected_target = None  # 선택된 타깃 (첫 번째 자동 선택)
+        self._selected_questions = []  # 선택된 질문들 (첫 번째 자동 선택)
+        self._pending_publish = False  # 발행 대기 플래그 (분석+썸네일 완료 대기)
+
 
     # ============================================================
     # Topic mode toggle
@@ -402,19 +343,15 @@ class InfoTab(QWidget):
 
     def toggle_topic_mode(self):
         if self.radio_use_category.isChecked():
-            self.left_card.setObjectName("cardSelected")
-            self.right_card.setObjectName("cardUnselected")
             self.combo_cat.setEnabled(True)
             self.manual_topic.setEnabled(False)
+            self.left_card.setStyleSheet(CARD_SELECTED_STYLE)
+            self.right_card.setStyleSheet(CARD_UNSELECTED_STYLE)
         else:
-            self.left_card.setObjectName("cardUnselected")
-            self.right_card.setObjectName("cardSelected")
             self.combo_cat.setEnabled(False)
             self.manual_topic.setEnabled(True)
-        # Force QSS re-evaluation after objectName change
-        for w in (self.left_card, self.right_card):
-            w.style().unpolish(w)
-            w.style().polish(w)
+            self.left_card.setStyleSheet(CARD_UNSELECTED_STYLE)
+            self.right_card.setStyleSheet(CARD_SELECTED_STYLE)
 
     # ============================================================
     # Topic generation & selection
@@ -449,6 +386,7 @@ class InfoTab(QWidget):
     def on_keyword_recommend_finished(self, topics: list):
         self._reset_generate_button()
         self._populate_topics(topics)
+        self._show_summary_mode()
         self.log_signal.emit(f"{len(topics)}개의 관련 주제가 추천되었습니다.")
 
     def on_keyword_recommend_error(self, error_msg: str):
@@ -479,7 +417,6 @@ class InfoTab(QWidget):
     def _populate_topics(self, topics: list):
         for t in topics:
             rb = QRadioButton(t)
-            rb.setObjectName("topicRadio")
             rb.toggled.connect(self.on_topic_changed)
             self.topic_layout_inner.addWidget(rb)
             self.topic_group.addButton(rb)
@@ -487,19 +424,24 @@ class InfoTab(QWidget):
     def on_recommend_finished(self, topics: list):
         self._reset_generate_button()
         self._populate_topics(topics)
+        self._show_summary_mode()
         self.log_signal.emit(f"{len(topics)}개의 트렌드 주제가 추천되었습니다.")
 
     def on_topic_changed(self, checked: bool):
         if checked:
-            self.btn_analyze.setEnabled(True)
             new_topic = self.get_selected_topic()
             if new_topic and new_topic != self.current_topic_for_thumbnail:
                 self.thumbnail_image = None
-                self.thumbnail_preview.setText("주제 선택 후 자동 생성됩니다")
-                self.btn_regenerate_thumbnail.setEnabled(False)
                 self.current_topic_for_thumbnail = new_topic
-                self.thumbnail_regenerate_count = 0
-                self.update_regenerate_count_label()
+                # 주제가 바뀌면 분석 결과 초기화
+                self.analysis_done = False
+                self._targets = []
+                self._questions = []
+                self._selected_target = None
+                self._selected_questions = []
+
+            # 발행 버튼 활성화 (분석은 발행 클릭 시 실행)
+            self.btn_publish.setEnabled(True)
 
     def on_recommend_error(self, error_msg: str):
         self._reset_generate_button()
@@ -512,145 +454,142 @@ class InfoTab(QWidget):
     def run_analysis(self):
         topic = self.get_selected_topic()
         if not topic:
-            QMessageBox.warning(self, "경고", "먼저 주제를 선택해주세요.")
             return
         self.log_signal.emit(f"'{topic}' 주제를 심층 분석 중입니다...")
-        self.btn_analyze.setEnabled(False)
-        self.btn_analyze.setText("주제 분석 중...")
 
         self.analysis_worker = AnalysisWorker(topic)
         self.analysis_worker.finished.connect(self.on_analysis_finished)
         self.analysis_worker.error.connect(self.on_analysis_error)
         self.analysis_worker.start()
 
-        if self.writing_settings_tab and self.writing_settings_tab.is_auto_thumbnail_enabled():
-            self.generate_thumbnail_auto()
-
     def on_analysis_finished(self, data):
-        self.btn_analyze.setEnabled(True)
-        self.btn_analyze.setText("주제 분석하기")
         self.analysis_done = True
 
-        # 세부 설정 섹션 활성화
-        self.detail_section.setEnabled(True)
-
-        # Clear old targets
-        for i in reversed(range(self.target_layout.count())):
-            widget = self.target_layout.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
-        self.list_questions.clear()
-
+        # 분석 결과를 내부 데이터로 저장 (UI 표시 없음)
         targets = data.get("targets", [])
         questions = data.get("questions", [])
         key_points = data.get("key_points", [])
 
-        for t in targets:
-            rb = QRadioButton(self._clean_to_plain_text(t))
-            rb.setObjectName("topicRadio")
-            self.target_layout.addWidget(rb)
-            self.target_group.addButton(rb)
+        self._targets = [self._clean_to_plain_text(t) for t in targets]
+        self._questions = [self._clean_to_plain_text(q) for q in questions]
+        self._key_points = [self._clean_to_plain_text(p) for p in key_points]
 
-        if self.target_group.buttons():
-            self.target_group.buttons()[0].setChecked(True)
+        # 첫 번째 타깃/질문 자동 선택
+        self._selected_target = self._targets[0] if self._targets else None
+        self._selected_questions = [self._questions[0]] if self._questions else []
 
-        for q in questions:
-            item = QListWidgetItem(self._clean_to_plain_text(q))
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Unchecked)
-            self.list_questions.addItem(item)
+        self.log_signal.emit("분석 완료!")
 
-        summary_text = "\n".join([f"• {self._clean_to_plain_text(p)}" for p in key_points])
-        self.txt_summary.setText(summary_text)
-
-        self.log_signal.emit("분석 완료! 세부 설정을 확인하고 원고를 생성하세요.")
-
-        # 세부 설정 섹션으로 스크롤
-        QTimer.singleShot(100, lambda: self.scroll.ensureWidgetVisible(self.detail_section))
+        # 발행 대기 중이면 발행 진행 체크
+        if self._pending_publish:
+            self._check_ready_to_publish()
 
     def on_analysis_error(self, error_msg: str):
-        self.btn_analyze.setEnabled(True)
-        self.btn_analyze.setText("주제 분석하기")
-        self.log_signal.emit(f"{error_msg}")
+        self.log_signal.emit(f"분석 실패: {error_msg}")
+        # 발행 대기 중이면 취소하고 버튼 복원
+        if self._pending_publish:
+            self._pending_publish = False
+            self.btn_publish.setEnabled(True)
+            self.btn_publish.setText("발행")
 
     # ============================================================
-    # Thumbnail
+    # Thumbnail (백그라운드 생성, UI 없음)
     # ============================================================
 
     def generate_thumbnail_auto(self):
+        """썸네일 자동 생성 (백그라운드)"""
         if not self.auth_token:
-            self.thumbnail_preview.setText("로그인 필요")
+            self.log_signal.emit("썸네일 생성 스킵: 로그인 필요")
             return
         topic = self.get_selected_topic()
         if not topic:
-            self.thumbnail_preview.setText("주제를 선택하세요")
             return
-        self.thumbnail_preview.setText("생성 중...")
-        self.btn_regenerate_thumbnail.setEnabled(False)
-        self.log_signal.emit(f"'{topic}' 주제로 썸네일 생성 중...")
+        self.log_signal.emit(f"썸네일 생성 중...")
         self.thumbnail_worker = ImageGenerateWorker(topic, self.auth_token)
         self.thumbnail_worker.finished.connect(self.on_thumbnail_finished)
         self.thumbnail_worker.error.connect(self.on_thumbnail_error)
         self.thumbnail_worker.start()
 
-    def regenerate_thumbnail(self):
-        self.thumbnail_regenerate_count += 1
-        self.update_regenerate_count_label()
-        self.generate_thumbnail_auto()
-
-    def update_regenerate_count_label(self):
-        self.lbl_regenerate_count.setText(f"재생성: {self.thumbnail_regenerate_count}회")
-
     def on_thumbnail_finished(self, images: list):
-        self.btn_regenerate_thumbnail.setEnabled(True)
+        """썸네일 생성 완료 (내부 저장)"""
         if images:
             self.thumbnail_image = images[0]
-            try:
-                img_data = base64.b64decode(self.thumbnail_image)
-                qimg = QImage.fromData(img_data)
-                pixmap = QPixmap.fromImage(qimg)
-                scaled = pixmap.scaled(150, 90, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                self.thumbnail_preview.setPixmap(scaled)
-            except:
-                self.thumbnail_preview.setText("로드 실패")
             self.log_signal.emit("썸네일 생성 완료!")
 
+        # 발행 대기 중이면 발행 진행 체크
+        if self._pending_publish:
+            self._check_ready_to_publish()
+
     def on_thumbnail_error(self, error_msg: str):
-        self.btn_regenerate_thumbnail.setEnabled(True)
-        self.thumbnail_preview.setText("생성 실패")
         self.log_signal.emit(f"썸네일 생성 실패: {error_msg}")
+        # 썸네일 실패해도 발행은 진행 (썸네일 없이)
+        if self._pending_publish:
+            self._check_ready_to_publish()
 
     # ============================================================
-    # Generate content
+    # Full Publish (원고 생성 + 발행 통합) - v3.17.0 흐름 변경
     # ============================================================
 
-    def request_generate(self):
+    def request_full_publish(self):
+        """발행 버튼 클릭 - 분석 → 썸네일 → 원고 생성 + 발행"""
         topic = self.get_selected_topic()
         if not topic:
             QMessageBox.warning(self, "경고", "주제를 선택해주세요.")
             return
 
-        if not self.analysis_done:
-            QMessageBox.warning(self, "안내", "먼저 주제를 분석해주세요.")
+        self.btn_publish.setEnabled(False)
+        self.btn_publish.setText("분석 중...")
+        self._pending_publish = True
+
+        # 분석이 이미 완료된 경우 (같은 주제 재발행)
+        if self.analysis_done and self.thumbnail_image:
+            self._do_actual_publish()
             return
 
-        self.btn_generate.setEnabled(False)
-        self.btn_generate.setText("생성 중...")
+        # 분석 시작
+        if not self.analysis_done:
+            self.run_analysis()
+
+        # 썸네일 생성 병렬 실행 (필수)
+        if not self.thumbnail_image:
+            self.generate_thumbnail_auto()
+
+        # 분석/썸네일이 이미 완료되어 있다면 바로 발행 체크
+        self._check_ready_to_publish()
+
+    def _check_ready_to_publish(self):
+        """분석과 썸네일이 모두 준비되었는지 확인 후 발행 진행"""
+        if not self._pending_publish:
+            return
+
+        # 분석 완료 필수
+        if not self.analysis_done:
+            return
+
+        # 썸네일은 선택적 (없어도 발행 진행)
+        # thumbnail_image가 None이어도 썸네일 워커가 끝났으면 진행
+        # (on_thumbnail_finished/error에서 호출되므로 여기 도달하면 끝난 것)
+
+        # 발행 진행
+        self._pending_publish = False
+        self.btn_publish.setText("발행 중...")
+        self._do_actual_publish()
+
+    def _do_actual_publish(self):
+        """실제 발행 로직 - 원고 생성 + 발행 시그널 emit"""
+        topic = self.get_selected_topic()
 
         tone = "친근한 이웃 (해요체)"
         length = "보통 (1,500자)"
+        category = ""
         if self.writing_settings_tab:
             tone = self.writing_settings_tab.get_default_tone()
             length = self.writing_settings_tab.get_default_length()
+            category = self.writing_settings_tab.get_info_category()
 
-        targets = []
-        selected_target = self.target_group.checkedButton()
-        if selected_target:
-            targets = [selected_target.text().strip()]
-
-        questions = [self.list_questions.item(i).text()
-                     for i in range(self.list_questions.count())
-                     if self.list_questions.item(i).checkState() == Qt.Checked]
+        # 내부 저장된 분석 데이터 사용
+        targets = [self._selected_target] if self._selected_target else []
+        questions = self._selected_questions if self._selected_questions else []
 
         naver_style_settings = {}
         post_structure = "default"
@@ -661,75 +600,39 @@ class InfoTab(QWidget):
             if hasattr(self.writing_settings_tab, 'get_structure_params'):
                 structure_params = self.writing_settings_tab.get_structure_params()
 
+        thumbnail = self.thumbnail_image if self.thumbnail_image else None
+        key_points = getattr(self, '_key_points', [])
+
         data = {
-            "action": "generate",
+            "action": "full",
             "mode": "info",
             "topic": topic,
             "tone": tone,
             "length": length,
+            "category": category,
             "targets": targets,
             "questions": questions,
-            "summary": self.txt_summary.toPlainText(),
-            "insight": self.txt_insight.toPlainText(),
+            "key_points": key_points,
             "naver_style": naver_style_settings,
             "post_structure": post_structure,
             "structure_params": structure_params,
-        }
-        self.start_signal.emit(data)
-
-    # ============================================================
-    # Publish
-    # ============================================================
-
-    def request_publish(self):
-        current_content = self.view_text.toPlainText()
-        if not current_content:
-            QMessageBox.warning(self, "경고", "발행할 내용이 없습니다.")
-            return
-
-        lines = current_content.split('\n')
-        title = self.generated_title or "무제"
-        content = current_content
-
-        if len(lines) > 0 and (lines[0].startswith("제목:") or lines[0].startswith("# ")):
-            title = lines[0].replace("제목:", "").replace("# ", "").strip()
-            content = "\n".join(lines[1:]).strip()
-
-        category = ""
-        if self.writing_settings_tab:
-            category = self.writing_settings_tab.get_info_category()
-
-        thumbnail = self.thumbnail_image if self.thumbnail_image else None
-        tags = self.txt_tags.text().strip()
-
-        data = {
-            "action": "publish_only",
-            "title": title,
-            "content": content,
-            "category": category,
-            "tags": tags,
             "images": {"thumbnail": thumbnail, "illustrations": []}
         }
         self.start_signal.emit(data)
 
+
     # ============================================================
-    # Hashtags
+    # Hashtags (내부 처리 - UI 없음)
     # ============================================================
 
     def _auto_generate_tags(self):
+        """자동 해시태그 생성 - Gemini Few-shot 사용"""
         if not self.generated_content:
             return
-        tags = extract_tags_local(self.generated_title or "", self.generated_content)
-        if tags:
-            self.txt_tags.setText(", ".join(tags))
-            self.btn_regenerate_tags.setEnabled(True)
-            self.log_signal.emit(f"해시태그 {len(tags)}개 자동 생성 완료")
 
-    def regenerate_tags(self):
-        if not self.generated_content:
-            return
-        self.btn_regenerate_tags.setEnabled(False)
-        self.btn_regenerate_tags.setText("생성 중...")
+        self.log_signal.emit("해시태그 생성 중...")
+
+        # HashtagWorker로 Gemini Few-shot 사용
         self.hashtag_worker = HashtagWorker(
             self.generated_title or "", self.generated_content, self.auth_token
         )
@@ -738,121 +641,84 @@ class InfoTab(QWidget):
         self.hashtag_worker.start()
 
     def _on_tags_generated(self, tags: list):
-        self.btn_regenerate_tags.setEnabled(True)
-        self.btn_regenerate_tags.setText("재생성")
+        """해시태그 생성 완료 - 내부 변수에 저장"""
         if tags:
-            self.txt_tags.setText(", ".join(tags))
-            self.log_signal.emit(f"해시태그 {len(tags)}개 생성 완료")
+            self.generated_tags = ", ".join(tags)
+            self.log_signal.emit(f"해시태그 {len(tags)}개 생성 완료: {self.generated_tags[:50]}...")
+        else:
+            self.generated_tags = ""
+            self.log_signal.emit("해시태그 생성 실패 (빈 결과)")
 
     def _on_tags_error(self, error_msg: str):
-        self.btn_regenerate_tags.setEnabled(True)
-        self.btn_regenerate_tags.setText("재생성")
-        self.log_signal.emit(f"해시태그 생성 실패: {error_msg}")
+        """해시태그 생성 오류 - 로컬 폴백"""
+        self.log_signal.emit(f"해시태그 AI 생성 실패, 로컬 추출 시도...")
+        tags = extract_tags_local(self.generated_title or "", self.generated_content)
+        if tags:
+            self.generated_tags = ", ".join(tags)
+            self.log_signal.emit(f"해시태그 {len(tags)}개 로컬 생성: {self.generated_tags[:50]}...")
+        else:
+            self.generated_tags = ""
+
 
     # ============================================================
-    # Schedule
-    # ============================================================
-
-    def schedule_publish(self):
-        target_dt = self.dt_schedule.dateTime()
-        now = QDateTime.currentDateTime()
-        if target_dt <= now:
-            QMessageBox.warning(self, "경고", "예약 시간은 현재 시간 이후여야 합니다.")
-            return
-        delay_ms = now.msecsTo(target_dt)
-        self.schedule_timer = QTimer(self)
-        self.schedule_timer.setSingleShot(True)
-        self.schedule_timer.timeout.connect(self._execute_scheduled_publish)
-        self.schedule_timer.start(delay_ms)
-        self.lbl_schedule_status.setText(f"예약됨: {target_dt.toString('yyyy-MM-dd HH:mm')}")
-        self.lbl_schedule_status.setObjectName("scheduleActive")
-        self.lbl_schedule_status.style().unpolish(self.lbl_schedule_status)
-        self.lbl_schedule_status.style().polish(self.lbl_schedule_status)
-        self.btn_schedule.hide()
-        self.btn_cancel_schedule.show()
-        self.btn_publish.setEnabled(False)
-        self.dt_schedule.setEnabled(False)
-        self.log_signal.emit(f"예약 발행 설정됨: {target_dt.toString('yyyy-MM-dd HH:mm')}")
-
-    def _execute_scheduled_publish(self):
-        self.schedule_timer = None
-        self.lbl_schedule_status.setText("예약 시간 도달! 발행 중...")
-        self.btn_cancel_schedule.hide()
-        self.btn_schedule.show()
-        self.dt_schedule.setEnabled(True)
-        self.log_signal.emit("예약 시간 도달 - 자동 발행을 시작합니다.")
-        self.request_publish()
-
-    def cancel_scheduled_publish(self):
-        if self.schedule_timer:
-            self.schedule_timer.stop()
-            self.schedule_timer = None
-        self.lbl_schedule_status.setText("예약이 취소되었습니다.")
-        self.lbl_schedule_status.setObjectName("scheduleInactive")
-        self.lbl_schedule_status.style().unpolish(self.lbl_schedule_status)
-        self.lbl_schedule_status.style().polish(self.lbl_schedule_status)
-        self.btn_cancel_schedule.hide()
-        self.btn_schedule.show()
-        self.btn_publish.setEnabled(True)
-        self.dt_schedule.setEnabled(True)
-        self.log_signal.emit("예약 발행이 취소되었습니다.")
-
-    # ============================================================
-    # Result view
+    # Result view (간소화 - 발행 버튼 리셋용)
     # ============================================================
 
     def update_result_view(self, result_data):
-        title = result_data.get("title", "제목 없음")
-        content = result_data.get("content_text", "") or result_data.get("content", "")
+        """원고 생성 결과 처리 - 내부 데이터 저장 및 버튼 리셋"""
+        try:
+            title = result_data.get("title", "제목 없음")
+            content = result_data.get("content_text", "") or result_data.get("content", "")
 
-        if not content and "blocks" in result_data:
-            blocks = result_data["blocks"]
-            lines = []
-            for block in blocks:
-                btype = block.get("type", "paragraph")
-                if btype == "heading":
-                    lines.append(f"\n【{block.get('text', '')}】\n")
-                elif btype == "paragraph":
-                    lines.append(block.get("text", ""))
-                elif btype == "list":
-                    for item in block.get("items", []):
-                        lines.append(f"  - {item}")
-                elif btype == "quotation":
-                    lines.append(f"\n「{block.get('text', '')}」\n")
-                elif btype == "divider":
-                    lines.append("\n━━━━━━━━━━━━━━━━━━━━\n")
-                elif btype == "image_placeholder":
-                    desc = block.get("description", "이미지")
-                    lines.append(f"\n[📷 {desc}]\n")
-            content = "\n".join(lines)
+            # 원본 블록 데이터 보존
+            if "blocks" in result_data and result_data["blocks"]:
+                self.generated_blocks = result_data["blocks"]
+            else:
+                self.generated_blocks = None
 
-        if content and content.strip().startswith("{"):
-            try:
-                import json
-                parsed = json.loads(content)
-                content = parsed.get("content_text", "") or parsed.get("content", content)
-            except:
-                pass
+            if not content and self.generated_blocks:
+                blocks = self.generated_blocks
+                lines = []
+                for block in blocks:
+                    btype = block.get("type", "paragraph")
+                    if btype == "heading":
+                        lines.append(f"\n【{block.get('text', '')}】\n")
+                    elif btype == "paragraph":
+                        lines.append(block.get("text", ""))
+                    elif btype == "list":
+                        for item in block.get("items", []):
+                            lines.append(f"  - {item}")
+                    elif btype == "quotation":
+                        lines.append(f"\n「{block.get('text', '')}」\n")
+                    elif btype == "divider":
+                        lines.append("\n━━━━━━━━━━━━━━━━━━━━\n")
+                    elif btype == "image_placeholder":
+                        desc = block.get("description", "이미지")
+                        lines.append(f"\n[{desc}]\n")
+                content = "\n".join(lines)
 
-        content = self._clean_to_plain_text(content)
-        self.generated_content = content
-        self.generated_title = title
+            if content and content.strip().startswith("{"):
+                try:
+                    import json
+                    parsed = json.loads(content)
+                    content = parsed.get("content_text", "") or parsed.get("content", content)
+                except Exception:
+                    pass
 
-        display_text = f"제목: {title}\n\n{'━' * 50}\n\n{content}"
-        self.view_text.setText(display_text)
+            content = self._clean_to_plain_text(content)
+            self.generated_content = content
+            self.generated_title = title
 
-        self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("원고 생성")
-        self.btn_publish.setEnabled(True)
-        self.btn_schedule.setEnabled(True)
-        self.dt_schedule.setMinimumDateTime(QDateTime.currentDateTime())
+            # 발행 버튼 리셋
+            self.btn_publish.setEnabled(True)
+            self.btn_publish.setText("발행")
 
-        # 미리보기 섹션 활성화 및 스크롤
-        self.preview_section.setEnabled(True)
-        QTimer.singleShot(100, lambda: self.scroll.ensureWidgetVisible(self.preview_section))
+            self.log_signal.emit(f"원고 생성 완료: {title}")
 
-        self.log_signal.emit("글 생성 완료!")
-        self._auto_generate_tags()
+        except Exception as e:
+            self.log_signal.emit(f"원고 처리 오류: {e}")
+            self.btn_publish.setEnabled(True)
+            self.btn_publish.setText("발행")
 
     def _clean_to_plain_text(self, content: str) -> str:
         if not content:
@@ -871,9 +737,10 @@ class InfoTab(QWidget):
         content = re.sub(r'\n{3,}', '\n\n', content)
         return content.strip()
 
-    def reset_generate_button(self):
-        self.btn_generate.setEnabled(True)
-        self.btn_generate.setText("원고 생성")
+    def reset_publish_button(self):
+        """발행 버튼 리셋"""
+        self.btn_publish.setEnabled(True)
+        self.btn_publish.setText("발행")
 
     def cleanup_workers(self):
         for worker in [self.recommend_worker, self.keyword_recommend_worker,

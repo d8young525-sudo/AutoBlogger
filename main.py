@@ -34,7 +34,7 @@ def run_gui():
         from ui.unified_settings_tab import UnifiedSettingsTab
         from ui.delivery_tab import DeliveryTab
         from ui.login_dialog import LoginDialog
-        from ui.styles import get_app_stylesheet
+        from ui.styles import RED_BUTTON_STYLE
         from core.worker import AutomationWorker
         
     except ImportError as e:
@@ -60,12 +60,10 @@ def run_gui():
             # 상단 사용자 정보 바
             user_bar = QHBoxLayout()
             self.lbl_user_email = QLabel("로그인이 필요합니다")
-            self.lbl_user_email.setObjectName("userEmailLabel")
             self.lbl_subscription = QLabel("")
-            self.lbl_subscription.setObjectName("mutedLabel")
-            
+
             self.btn_logout = QPushButton("로그아웃")
-            self.btn_logout.setObjectName("dangerButton")
+            self.btn_logout.setStyleSheet(RED_BUTTON_STYLE)
             self.btn_logout.clicked.connect(self.do_logout)
             self.btn_logout.hide()
             
@@ -77,7 +75,6 @@ def run_gui():
 
             # 구분선
             line = QLabel()
-            line.setObjectName("sectionDivider")
             line.setFixedHeight(2)
             layout.addWidget(line)
 
@@ -102,7 +99,7 @@ def run_gui():
             layout.addWidget(QLabel("시스템 로그"))
             self.log_area = QTextEdit()
             self.log_area.setReadOnly(True)
-            self.log_area.setMaximumHeight(150)
+            self.log_area.setMaximumHeight(80)
             layout.addWidget(self.log_area)
 
             # Connect signals
@@ -158,13 +155,13 @@ def run_gui():
                     self,
                     "승인 대기",
                     "관리자 승인이 필요합니다.\n\n"
-                    "📞 오픈카톡으로 문의해주세요:\n"
+                    "오픈카톡으로 문의해주세요:\n"
                     "https://open.kakao.com/o/sgbYdyai"
                 )
                 self.show_login_required()
                 return
             
-            self.update_log(f"✅ 로그인 성공: {user_data.get('email', '')}")
+            self.update_log(f"로그인 성공: {user_data.get('email', '')}")
 
         def verify_and_fetch_user_info(self) -> bool:
             """서버에서 사용자 정보 확인 및 승인 여부 체크"""
@@ -211,12 +208,8 @@ def run_gui():
                 is_admin = self.user_info.get("is_admin", False)
                 if is_admin:
                     self.lbl_subscription.setText("관리자")
-                    self.lbl_subscription.setObjectName("subscriptionGold")
                 else:
                     self.lbl_subscription.setText("정식 사용자")
-                    self.lbl_subscription.setObjectName("subscriptionNormal")
-                self.lbl_subscription.style().unpolish(self.lbl_subscription)
-                self.lbl_subscription.style().polish(self.lbl_subscription)
                 
                 self.btn_logout.show()
                 
@@ -239,7 +232,7 @@ def run_gui():
                 self.id_token = None
                 self.user_info = None
                 
-                self.update_log("🚪 로그아웃 되었습니다.")
+                self.update_log("로그아웃 되었습니다.")
                 self.show_login_required()
 
         def start_automation(self, data):
@@ -250,7 +243,7 @@ def run_gui():
             # 발행 기능은 네이버 계정 필요
             if data.get("action") in ["publish_only", "full"]:
                 if not user_id or not user_pw:
-                    self.update_log("❌ 오류: [환경 설정] 탭에서 네이버 ID/PW를 먼저 저장해주세요.")
+                    self.update_log("오류: [환경 설정] 탭에서 네이버 ID/PW를 먼저 저장해주세요.")
                     self.tabs.setCurrentIndex(2)  # 설정 탭으로 이동
                     return
 
@@ -279,26 +272,44 @@ def run_gui():
             self.worker.log_signal.connect(self.update_log)
             self.worker.result_signal.connect(self.on_worker_result)
             self.worker.error_signal.connect(self.on_worker_error)
+            self.worker.finished_signal.connect(self.on_worker_finished)
             self.worker.start()
 
         def on_worker_result(self, result):
             """워커 결과 처리"""
-            self.update_log(f"결과 수신: title={result.get('title', 'N/A')}, content 길이={len(result.get('content_text', '') or result.get('content', ''))}")
-            
-            # 현재 탭에 따라 결과 전달
-            current_tab = self.tabs.currentIndex()
-            if current_tab == 0:  # 정보성 글쓰기
-                self.tab_info.update_result_view(result)
-            elif current_tab == 1:  # 출고 후기
-                self.tab_delivery.update_result_view(result)
+            try:
+                content_len = len(result.get('content_text', '') or result.get('content', ''))
+                self.update_log(f"결과 수신: title={result.get('title', 'N/A')}, content 길이={content_len}")
+
+                # 현재 탭에 따라 결과 전달
+                current_tab = self.tabs.currentIndex()
+                if current_tab == 0:  # 정보성 글쓰기
+                    self.tab_info.update_result_view(result)
+                elif current_tab == 1:  # 출고 후기
+                    self.tab_delivery.update_result_view(result)
+            except Exception as e:
+                self.update_log(f"결과 처리 중 오류: {e}")
+                self._reset_all_buttons()
+
+        def on_worker_finished(self):
+            """워커 완료 시 버튼 상태 복원"""
+            self._reset_all_buttons()
 
         def on_worker_error(self, error_msg):
             """워커 에러 처리"""
-            self.update_log(f"❌ {error_msg}")
-            # 버튼 상태 복원
-            current_tab = self.tabs.currentIndex()
-            if current_tab == 0:
-                self.tab_info.reset_generate_button()
+            self.update_log(f"{error_msg}")
+            self._reset_all_buttons()
+
+        def _reset_all_buttons(self):
+            """모든 탭의 버튼 상태 복원"""
+            try:
+                self.tab_info.reset_publish_button()
+            except Exception:
+                pass
+            try:
+                self.tab_delivery.reset_publish_button()
+            except Exception:
+                pass
 
         @Slot(str)
         def update_log(self, msg):
@@ -320,14 +331,59 @@ def run_gui():
 
     # Run application
     app = QApplication(sys.argv)
-    
-    # 기본 폰트를 QApplication 레벨에서 설정 (QSS font-size 상속 버그 방지)
+
+    # 1. qt-material 테마 적용
+    from qt_material import apply_stylesheet
+    apply_stylesheet(app, theme='light_lightgreen.xml')
+
+    # 2. qt-material accent 색상 중립화 (체크박스/라디오버튼 제외)
+    app.setStyleSheet(app.styleSheet() + """
+        QTextEdit, QPlainTextEdit {
+            color: #333333;
+            border: 1px solid #cccccc;
+        }
+        QTextEdit:focus, QPlainTextEdit:focus, QLineEdit:focus {
+            border: 1px solid #aaaaaa;
+        }
+        QComboBox QAbstractItemView {
+            selection-background-color: #e0e0e0;
+            selection-color: #333333;
+        }
+        QComboBox:on {
+            border: 1px solid #aaaaaa;
+        }
+        QComboBox:focus {
+            color: #333333;
+            border-width: 0 0 2px 0;
+            border-color: #aaaaaa;
+        }
+        QScrollBar:vertical {
+            background: #f0f0f0;
+        }
+        QScrollBar::handle:vertical {
+            background: #c0c0c0;
+            border-radius: 4px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background: #a0a0a0;
+        }
+        QScrollBar:horizontal {
+            background: #f0f0f0;
+        }
+        QScrollBar::handle:horizontal {
+            background: #c0c0c0;
+            border-radius: 4px;
+        }
+        QScrollBar::handle:horizontal:hover {
+            background: #a0a0a0;
+        }
+    """)
+
+    # 3. 한국어 폰트 유지
     from PySide6.QtGui import QFont
     default_font = QFont("Malgun Gothic", 10)
     default_font.setStyleHint(QFont.SansSerif)
     app.setFont(default_font)
-    
-    app.setStyleSheet(get_app_stylesheet())
     window = MainWindow()
     window.show()
     

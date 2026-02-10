@@ -3,6 +3,7 @@
 
 # GUI Framework
 PySide6>=6.5.0
+qt-material>=2.14
 
 # Web Automation
 selenium>=4.15.0
