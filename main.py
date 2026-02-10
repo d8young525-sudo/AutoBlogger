@@ -80,6 +80,34 @@ def run_gui():
 
             # Tab widget
             self.tabs = QTabWidget()
+            self.tabs.setStyleSheet("""
+                QTabWidget::pane {
+                    background-color: #FFFFFF;
+                    border: none;
+                }
+                QTabBar {
+                    background-color: #E6E6E6;
+                }
+                QTabBar::tab {
+                    background-color: #FFFFFF;
+                    color: #888888;
+                    font-size: 10pt;
+                    font-weight: bold;
+                    padding: 6px 28px;
+                    margin: 6px 4px 0 4px;
+                    border: none;
+                    border-top-left-radius: 8px;
+                    border-top-right-radius: 8px;
+                }
+                QTabBar::tab:hover:!selected {
+                    color: #555555;
+                    background-color: #F5F5F5;
+                }
+                QTabBar::tab:selected {
+                    color: #03C75A;
+                    background-color: #FFFFFF;
+                }
+            """)
             
             # 통합 설정 탭 먼저 생성 (다른 탭에서 참조)
             self.tab_settings = UnifiedSettingsTab()
@@ -218,13 +246,13 @@ def run_gui():
 
         def do_logout(self):
             """로그아웃 처리"""
-            reply = QMessageBox.question(
-                self, 
-                "로그아웃", 
-                "로그아웃 하시겠습니까?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("로그아웃")
+            msg_box.setText("로그아웃 하시겠습니까?")
+            msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg_box.setStyleSheet("QPushButton { background-color: #f0f0f0; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 6px 16px; } QPushButton:hover { background-color: #e0e0e0; }")
+            reply = msg_box.exec()
+
             if reply == QMessageBox.Yes:
                 self.settings.remove("auth_token")
                 self.settings.remove("auth_uid")
@@ -338,12 +366,16 @@ def run_gui():
 
     # 2. qt-material accent 색상 중립화 (체크박스/라디오버튼 제외)
     app.setStyleSheet(app.styleSheet() + """
-        QTextEdit, QPlainTextEdit {
+        QTextEdit, QPlainTextEdit, QLineEdit {
             color: #333333;
             border: 1px solid #cccccc;
         }
         QTextEdit:focus, QPlainTextEdit:focus, QLineEdit:focus {
+            color: #333333;
             border: 1px solid #aaaaaa;
+        }
+        QSpinBox:focus, QDateTimeEdit:focus {
+            color: #333333;
         }
         QComboBox QAbstractItemView {
             selection-background-color: #e0e0e0;

@@ -4,15 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Naver Blog Auto Blogger Pro (v3.18.0) — a Python desktop application that automates Naver blog posting using AI-generated content. Combines PySide6 GUI, Selenium browser automation, Google Gemini AI for content/image generation, and Firebase for auth and backend.
+Naver Blog Auto Blogger Pro (v3.18.1) — a Python desktop application that automates Naver blog posting using AI-generated content. Combines PySide6 GUI, Selenium browser automation, Google Gemini AI for content/image generation, and Firebase for auth and backend.
 
-**v3.18.0 주요 변경**:
-- qt-material 라이브러리 적용 (`light_lightgreen.xml` 테마)
-- 기존 Fusion + QPalette 제거, Material Design 기반 UI
-- 불필요한 accent 색상(연두색) 중립화 (버튼, 입력필드, 스크롤바, 콤보박스)
-- GUI 전체 이모지 제거
-- 카드 테두리 버그 수정 (`.QFrame` dot prefix)
-- Figma 참고 UI 레이아웃 개선 (label-above, 2-column 그리드)
+**v3.18.1 주요 변경**:
+- 탭 바 심플 디자인: 회색 배경 + 흰색 탭 + 선택 탭 초록 글씨, 위젯 레벨 QSS
+- 로그인 다이얼로그: 로그인 버튼 초록, 비밀번호 링크 파란 텍스트, 종료 버튼 제거
+- 로그아웃 Yes/No 버튼 중립 스타일
+- QLineEdit/QSpinBox focus 색상 검정 오버라이드
+- QGroupBox 간격 통일 (info_tab 마진/스페이싱 제거)
 
 ## Running the Application
 

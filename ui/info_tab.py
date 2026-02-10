@@ -144,7 +144,6 @@ class InfoTab(QWidget):
 
     def init_ui(self):
         outer = QVBoxLayout()
-        outer.setContentsMargins(0, 0, 0, 0)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -152,8 +151,6 @@ class InfoTab(QWidget):
 
         content = QWidget()
         self.content_layout = QVBoxLayout(content)
-        self.content_layout.setSpacing(14)
-        self.content_layout.setContentsMargins(8, 8, 8, 8)
 
         self._build_section_topic()
         self._init_internal_data()

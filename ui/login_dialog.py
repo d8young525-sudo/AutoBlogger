@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, QSettings
 
 from config import Config
-from ui.styles import get_login_dialog_stylesheet
+from ui.styles import GREEN_BUTTON_STYLE
 
 # Firebase Auth REST API
 FIREBASE_API_KEY = ""  # Firebase 웹 API 키 (config에서 로드)
@@ -37,7 +37,7 @@ class LoginDialog(QDialog):
         self.setWindowTitle("Auto Blogger Pro 로그인")
         self.setMinimumWidth(420)
         self.setModal(True)
-        self.setStyleSheet(get_login_dialog_stylesheet())
+        self.setStyleSheet("QLineEdit { color: #333333; }")
         self.init_ui()
         
         # 저장된 로그인 정보 로드
@@ -48,12 +48,39 @@ class LoginDialog(QDialog):
         
         # 앱 로고/타이틀
         title_label = QLabel("Auto Blogger Pro")
-        title_label.setObjectName("dialogTitle")
         title_label.setAlignment(Qt.AlignCenter if hasattr(Qt, 'AlignCenter') else 0x0004)
         layout.addWidget(title_label)
         
-        # 탭 위젯 (로그인 / 회원가입 / 비밀번호 찾기)
+        # 탭 위젯 (로그인 / 회원가입)
         self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                background-color: #FFFFFF;
+                border: none;
+            }
+            QTabBar {
+                background-color: #E6E6E6;
+            }
+            QTabBar::tab {
+                background-color: #FFFFFF;
+                color: #888888;
+                font-size: 10pt;
+                font-weight: bold;
+                padding: 4px 24px;
+                margin: 4px 3px 0 3px;
+                border: none;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+            }
+            QTabBar::tab:hover:!selected {
+                color: #555555;
+                background-color: #F5F5F5;
+            }
+            QTabBar::tab:selected {
+                color: #03C75A;
+                background-color: #FFFFFF;
+            }
+        """)
         
         # ===== 로그인 탭 =====
         login_tab = QWidget()
@@ -72,20 +99,19 @@ class LoginDialog(QDialog):
         login_layout.addLayout(login_form)
         
         self.btn_login = QPushButton("로그인")
-        self.btn_login.setObjectName("primaryButton")
+        self.btn_login.setStyleSheet(GREEN_BUTTON_STYLE)
         self.btn_login.clicked.connect(self.do_login)
         login_layout.addWidget(self.btn_login)
         
         # 마지막 로그인 정보
         self.login_status = QLabel("")
-        self.login_status.setObjectName("mutedLabel")
         login_layout.addWidget(self.login_status)
         
         # 비밀번호 찾기 (인라인)
-        self.btn_forgot = QPushButton("비밀번호를 잊으셨나요?")
-        self.btn_forgot.setObjectName("linkButton")
+        self.btn_forgot = QLabel("<a href='#' style='color: #1a73e8; text-decoration: none;'>비밀번호를 잊으셨나요?</a>")
         self.btn_forgot.setCursor(Qt.PointingHandCursor if hasattr(Qt, 'PointingHandCursor') else 13)
-        self.btn_forgot.clicked.connect(self._toggle_reset_form)
+        self.btn_forgot.setAlignment(Qt.AlignCenter if hasattr(Qt, 'AlignCenter') else 0x0004)
+        self.btn_forgot.linkActivated.connect(lambda _: self._toggle_reset_form())
         login_layout.addWidget(self.btn_forgot)
         
         # 비밀번호 재설정 폼 (기본 숨김)
@@ -94,7 +120,6 @@ class LoginDialog(QDialog):
         reset_form_layout.setContentsMargins(0, 5, 0, 0)
         
         reset_info = QLabel("가입한 이메일로 비밀번호 재설정 링크를 보내드립니다.")
-        reset_info.setObjectName("mutedLabel")
         reset_form_layout.addWidget(reset_info)
         
         reset_email_row = QHBoxLayout()
@@ -103,7 +128,6 @@ class LoginDialog(QDialog):
         reset_email_row.addWidget(self.reset_email)
         
         self.btn_reset = QPushButton("재설정 링크 발송")
-        self.btn_reset.setObjectName("secondaryButton")
         self.btn_reset.clicked.connect(self.do_reset_password)
         reset_email_row.addWidget(self.btn_reset)
         reset_form_layout.addLayout(reset_email_row)
@@ -134,17 +158,14 @@ class LoginDialog(QDialog):
         register_layout.addLayout(register_form)
         
         self.btn_register = QPushButton("회원가입")
-        self.btn_register.setObjectName("infoButton")
         self.btn_register.clicked.connect(self.do_register)
         register_layout.addWidget(self.btn_register)
         
         register_info = QLabel("회원가입 후 관리자 승인이 필요합니다.")
-        register_info.setObjectName("warningLabel")
         register_layout.addWidget(register_info)
         
         # 관리자 연락처 안내
         contact_info = QLabel(f"승인 문의: <a href='{ADMIN_CONTACT}'>오픈카톡</a>")
-        contact_info.setObjectName("infoLabel")
         contact_info.setOpenExternalLinks(True)
         register_layout.addWidget(contact_info)
         
@@ -152,15 +173,6 @@ class LoginDialog(QDialog):
         self.tabs.addTab(register_tab, "회원가입")
         
         layout.addWidget(self.tabs)
-        
-        # 하단 취소 버튼
-        btn_layout = QHBoxLayout()
-        self.btn_cancel = QPushButton("종료")
-        self.btn_cancel.setObjectName("dangerButton")
-        self.btn_cancel.clicked.connect(self.reject)
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.btn_cancel)
-        layout.addLayout(btn_layout)
         
         self.setLayout(layout)
     
@@ -182,12 +194,12 @@ class LoginDialog(QDialog):
         """비밀번호 재설정 폼 토글"""
         if self.reset_frame.isVisible():
             self.reset_frame.hide()
-            self.btn_forgot.setText("비밀번호를 잊으셨나요?")
+            self.btn_forgot.setText("<a href='#' style='color: #1a73e8; text-decoration: none;'>비밀번호를 잊으셨나요?</a>")
         else:
             self.reset_frame.show()
             self.reset_email.setText(self.login_email.text().strip())
             self.reset_email.setFocus()
-            self.btn_forgot.setText("닫기")
+            self.btn_forgot.setText("<a href='#' style='color: #1a73e8; text-decoration: none;'>닫기</a>")
     
     def do_login(self):
         """로그인 실행"""
@@ -357,7 +369,7 @@ class LoginDialog(QDialog):
                 
                 # 폼 숨기기
                 self.reset_frame.hide()
-                self.btn_forgot.setText("비밀번호를 잊으셨나요?")
+                self.btn_forgot.setText("<a href='#' style='color: #1a73e8; text-decoration: none;'>비밀번호를 잊으셨나요?</a>")
                 self.login_email.setText(email)
                 
             else:

@@ -1,5 +1,46 @@
 # CHANGELOG
 
+## v3.18.1 — 탭 바 디자인 개선 + 로그인 다이얼로그 개선
+
+### 탭 바 디자인
+
+- 심플 스타일 적용: 회색 배경(#E6E6E6) + 흰색 탭 + 선택 탭 초록 글씨(#03C75A)
+- 위젯 레벨 QSS로 qt-material 잔재 완전 차단
+- 테두리/밑줄 제거, 둥근 상단 모서리(8px)
+- 메인 탭 + 로그인 다이얼로그 탭 동일 스타일 적용
+
+### 로그인 다이얼로그 개선
+
+- 로그인 버튼: GREEN_BUTTON_STYLE 적용 (발행 버튼과 동일)
+- "비밀번호를 잊으셨나요?": QPushButton → QLabel 파란색 링크 텍스트(#1a73e8)
+- 종료 버튼 제거
+- objectName 셀렉터 제거 (기존 Fusion 스타일 잔재)
+
+### 로그아웃 다이얼로그
+
+- Yes/No 버튼 연두색 제거, 중립 회색 스타일 적용
+
+### QLineEdit 입력 색상 수정
+
+- 일반 상태 + focus 상태 텍스트 색상: 연두색 → 검정(#333333)
+- QSpinBox, QDateTimeEdit focus 색상도 동일 적용
+- 로그인 다이얼로그에도 QLineEdit 색상 오버라이드 추가
+
+### QGroupBox 간격 통일
+
+- 정보성글쓰기탭: `content_layout` 명시적 마진/스페이싱 제거
+- `outer.setContentsMargins(0,0,0,0)` 제거 → Qt 기본값으로 다른 탭과 통일
+
+### 수정 파일
+
+| 파일 | 변경 |
+|------|------|
+| `main.py` | 탭 바 위젯 QSS, 로그아웃 버튼 스타일, QLineEdit focus 색상 |
+| `ui/login_dialog.py` | 탭 스타일, 로그인 버튼, 비밀번호 링크, 종료 버튼 제거 |
+| `ui/info_tab.py` | content_layout 마진/스페이싱/outer 마진 제거 |
+
+---
+
 ## v3.18.0 — qt-material 테마 적용 + UI 디자인 개선
 
 ### 테마 시스템 교체
